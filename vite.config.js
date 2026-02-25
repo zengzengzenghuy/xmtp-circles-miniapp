@@ -33,7 +33,7 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    include: ["protobufjs/minimal"],
+    include: ["protobufjs/minimal", "@wagmi/connectors"],
     exclude: ["@xmtp/browser-sdk"],
     esbuildOptions: {
       define: {
