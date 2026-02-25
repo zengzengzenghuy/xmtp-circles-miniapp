@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useAccount, useConnect, useDisconnect } from 'wagmi';
+import React, { useState } from "react";
+import { useAccount, useConnect, useDisconnect } from "wagmi";
 
 function ConnectButton() {
   const { address, isConnected } = useAccount();
@@ -7,24 +7,32 @@ function ConnectButton() {
   const { disconnect } = useDisconnect();
   const [showConnectors, setShowConnectors] = useState(false);
 
+  // Debug: log connectors
+  console.log("Available connectors:", connectors);
+
   // Format address for display
   const formatAddress = (addr) => {
-    if (!addr) return '';
+    if (!addr) return "";
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
 
   // Filter connectors to only show MetaMask and WalletConnect
-  const availableConnectors = connectors.filter(
-    connector => connector.name === 'MetaMask' || connector.name === 'WalletConnect'
-  );
+  // const availableConnectors = connectors.filter(
+  //   (connector) =>
+  //     connector.name === "MetaMask" ||
+  //     connector.name === "WalletConnect" ||
+  //     connector.name === "injected",
+  // );
+  const availableConnectors = connectors;
+
+  // console.log("Filtered connectors:", availableConnectors);
 
   if (!isConnected) {
     return (
       <div className="connect-wallet-container">
         <button
           className="connect-btn"
-          onClick={() => setShowConnectors(!showConnectors)}
-        >
+          onClick={() => setShowConnectors(!showConnectors)}>
           Connect Wallet
         </button>
 
@@ -37,8 +45,7 @@ function ConnectButton() {
                   connect({ connector });
                   setShowConnectors(false);
                 }}
-                className="connector-btn"
-              >
+                className="connector-btn">
                 {connector.name}
               </button>
             ))}
