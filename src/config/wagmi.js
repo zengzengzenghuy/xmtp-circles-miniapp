@@ -1,6 +1,6 @@
 import { http, createConfig } from 'wagmi';
 import { gnosis } from 'wagmi/chains';
-import { metaMask, walletConnect } from 'wagmi/connectors';
+import { metaMask, walletConnect } from '@wagmi/connectors';
 
 // Replace with your WalletConnect project ID from https://cloud.walletconnect.com/
 const projectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || 'YOUR_PROJECT_ID';
