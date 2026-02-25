@@ -1,4 +1,4 @@
-import React from 'react';
+import React from "react";
 
 function ConversationList({
   conversations,
@@ -6,7 +6,7 @@ function ConversationList({
   onSelectConversation,
   onNewConversation,
   isLoading,
-  onRefresh
+  onRefresh,
 }) {
   // State to store peer inbox IDs for DMs
   const [peerInboxIds, setPeerInboxIds] = React.useState({});
@@ -17,7 +17,10 @@ function ConversationList({
       const newIds = {};
       for (const conversation of conversations) {
         // Check if it's a DM by checking if peerInboxId exists as a function
-        if (conversation.peerInboxId && typeof conversation.peerInboxId === 'function') {
+        if (
+          conversation.peerInboxId &&
+          typeof conversation.peerInboxId === "function"
+        ) {
           try {
             const peerId = await conversation.peerInboxId();
             newIds[conversation.id] = peerId;
@@ -45,25 +48,28 @@ function ConversationList({
       return String(conversation.name);
     }
     // Fallback to conversation ID
-    return conversation.id ? String(conversation.id).slice(0, 8) + "..." : "Unknown";
+    return conversation.id
+      ? String(conversation.id).slice(0, 8) + "..."
+      : "Unknown";
   };
 
   return (
     <div className="conversation-list">
       <div className="conversation-list-header">
         <h2>Messages</h2>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
           {onRefresh && (
             <button
               className="refresh-btn"
               onClick={onRefresh}
               disabled={isLoading}
-              title="Sync conversations"
-            >
+              title="Sync conversations">
               ↻
             </button>
           )}
-          <button className="new-message-btn" onClick={onNewConversation}>+</button>
+          <button className="new-message-btn" onClick={onNewConversation}>
+            +
+          </button>
         </div>
       </div>
 
@@ -80,30 +86,30 @@ function ConversationList({
         ) : (
           conversations.map((conversation) => {
             const peerAddress = getPeerAddress(conversation);
-            const isGroup = conversation.metadata?.conversationType === 'group';
+            const isGroup = conversation.metadata?.conversationType === "group";
             // Get avatar initials safely
-            const avatarText = peerAddress && peerAddress.length >= 2
-              ? peerAddress.slice(0, 2).toUpperCase()
-              : "??";
+            const avatarText =
+              peerAddress && peerAddress.length >= 2
+                ? peerAddress.slice(0, 2).toUpperCase()
+                : "??";
 
             return (
               <div
                 key={conversation.id}
                 className={`conversation-item ${
-                  selectedConversation?.id === conversation.id ? 'active' : ''
+                  selectedConversation?.id === conversation.id ? "active" : ""
                 }`}
-                onClick={() => onSelectConversation(conversation)}
-              >
-                <div className="conversation-avatar">
-                  {avatarText}
-                </div>
+                onClick={() => onSelectConversation(conversation)}>
+                <div className="conversation-avatar">{avatarText}</div>
                 <div className="conversation-details">
                   <div className="conversation-header">
                     <span className="conversation-address">
                       {isGroup ? `Group: ${peerAddress}` : peerAddress}
                     </span>
                     <span className="conversation-time">
-                      {new Date(Number(conversation.createdAtNs) / 1_000_000).toLocaleDateString()}
+                      {new Date(
+                        Number(conversation.createdAtNs) / 1_000_000,
+                      ).toLocaleDateString()}
                     </span>
                   </div>
                   <div className="conversation-preview">

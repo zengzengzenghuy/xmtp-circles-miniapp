@@ -60,7 +60,7 @@ function App() {
       await xmtpClient.conversations.sync();
 
       // Get list of conversations
-      const convos = await xmtpClient.conversations.list();
+      const convos = await xmtpClient.conversations.listDms();
       console.log("Synced conversations:", convos);
       setConversations(convos);
     } catch (error) {
