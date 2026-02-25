@@ -1,17 +1,17 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
 
 // Plugin to add CORS headers required for XMTP SDK
 const corsHeadersPlugin = () => ({
-  name: 'cors-headers',
+  name: "cors-headers",
   configureServer(server) {
     server.middlewares.use((req, res, next) => {
-      res.setHeader('Cross-Origin-Embedder-Policy', 'credentialless');
-      res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+      res.setHeader("Cross-Origin-Embedder-Policy", "credentialless");
+      res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
 
       // Set correct MIME type for WASM files
-      if (req.url?.endsWith('.wasm')) {
-        res.setHeader('Content-Type', 'application/wasm');
+      if (req.url?.endsWith(".wasm")) {
+        res.setHeader("Content-Type", "application/wasm");
       }
 
       next();
@@ -22,26 +22,26 @@ const corsHeadersPlugin = () => ({
 export default defineConfig({
   plugins: [react(), corsHeadersPlugin()],
   // Set base path for GitHub Pages deployment
-  base: process.env.NODE_ENV === 'production' ? '/miniappDemo/xmtp-chat/' : '/',
+  base: process.env.NODE_ENV === "production" ? "/xmtp-circles-miniapp" : "/",
   server: {
     port: 5182,
   },
   build: {
-    outDir: 'dist',
+    outDir: "dist",
     commonjsOptions: {
       transformMixedEsModules: true,
     },
   },
   optimizeDeps: {
-    include: ['protobufjs/minimal'],
-    exclude: ['@xmtp/browser-sdk'],
+    include: ["protobufjs/minimal"],
+    exclude: ["@xmtp/browser-sdk"],
     esbuildOptions: {
       define: {
-        global: 'globalThis',
+        global: "globalThis",
       },
     },
   },
   worker: {
-    format: 'es',
+    format: "es",
   },
 });
