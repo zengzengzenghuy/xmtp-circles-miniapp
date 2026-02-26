@@ -161,9 +161,8 @@ function AccountPage({
                     <div className="inbox-create-box">
                       <span className="inbox-label">XMTP Inbox ID</span>
                       <p className="inbox-description">
-                        Create your XMTP inbox ID to start sending and receiving
-                        messages. You'll be asked to sign a message to verify
-                        your wallet.
+                        Connect to XMTP to start sending and receiving messages.
+                        You'll be asked to sign a message to verify your wallet.
                       </p>
                       {navigator.userAgent.includes("Brave") && (
                         <div

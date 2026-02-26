@@ -6,12 +6,12 @@ import MessageArea from "./components/MessageArea";
 import BottomTabs from "./components/BottomTabs";
 import AccountPage from "./components/AccountPage";
 import NewConversationModal from "./components/NewConversationModal";
-import { createEOASigner } from "./helpers/createSigner";
+import { createEOASigner, createSCWSigner } from "./helpers/createSigner";
 import { useConversations } from "./hooks/useConversations";
 import { useActions } from "./stores/inboxHooks";
 
 function App() {
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, connector, chainId } = useAccount();
   const { signMessageAsync } = useSignMessage();
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [activeTab, setActiveTab] = useState("chat");
@@ -51,9 +51,14 @@ function App() {
   const stopConversationStreamRef = useRef(null);
   const stopAllMessagesStreamRef = useRef(null);
 
-  // Create XMTP inbox
+  // Create or load XMTP inbox
   const handleCreateInbox = async () => {
-    console.log("handleCreateInbox called", { address, isConnected });
+    console.log("handleCreateInbox called", {
+      address,
+      isConnected,
+      connector: connector?.name,
+      chainId,
+    });
 
     if (!address || !isConnected) {
       console.log("Missing address or not connected");
@@ -64,13 +69,40 @@ function App() {
     setInboxError(null);
 
     try {
-      console.log("Creating signer...");
-      const signer = createEOASigner(address, (message) => {
-        console.log("Sign message requested:", message);
-        return signMessageAsync({ message });
+      // Check if there's an existing stored inbox ID
+      const storedInboxId = localStorage.getItem(
+        `xmtp-inbox-${address.toLowerCase()}`,
+      );
+
+      // Determine if we should use SCW signer (for WalletConnect)
+      const isWalletConnect = connector?.name === "WalletConnect";
+      const useChainId = chainId || 1; // Default to mainnet if chainId is not available
+
+      console.log("Creating signer...", {
+        isWalletConnect,
+        useChainId,
+        hasStoredInbox: !!storedInboxId,
       });
 
-      console.log("Signer created, calling Client.create...");
+      const signer = isWalletConnect
+        ? createSCWSigner(
+            address,
+            (message) => {
+              console.log("SCW Sign message requested:", message);
+              return signMessageAsync({ message });
+            },
+            useChainId,
+          )
+        : createEOASigner(address, (message) => {
+            console.log("EOA Sign message requested:", message);
+            return signMessageAsync({ message });
+          });
+
+      if (storedInboxId) {
+        console.log("Loading existing XMTP client...");
+      } else {
+        console.log("Creating new XMTP inbox...");
+      }
 
       const client = await Client.create(signer, {
         env: "dev",
@@ -81,19 +113,24 @@ function App() {
 
       console.log("Client created:", client);
 
-      // Store inbox ID in localStorage
-      localStorage.setItem(
-        `xmtp-inbox-${address.toLowerCase()}`,
-        client.inboxId,
-      );
+      // Store inbox ID in localStorage if it's a new inbox
+      if (!storedInboxId) {
+        localStorage.setItem(
+          `xmtp-inbox-${address.toLowerCase()}`,
+          client.inboxId,
+        );
+        console.log("New inbox ID stored");
+      } else {
+        console.log("Existing inbox loaded");
+      }
 
       setXmtpClient(client);
-      console.log("Inbox created successfully");
+      console.log("XMTP connection successful");
     } catch (error) {
-      console.error("Error creating XMTP inbox:", error);
+      console.error("Error connecting to XMTP:", error);
       console.error("Error stack:", error.stack);
 
-      let errorMessage = error.message || "Failed to create inbox";
+      let errorMessage = error.message || "Failed to connect to XMTP";
 
       // Add helpful guidance for common issues
       if (
@@ -115,48 +152,15 @@ function App() {
     }
   };
 
-  // Load XMTP client on mount
+  // Handle wallet disconnection
   useEffect(() => {
-    const loadClient = async () => {
-      if (isConnected && address) {
-        try {
-          const storedInboxId = localStorage.getItem(
-            `xmtp-inbox-${address.toLowerCase()}`,
-          );
-          if (storedInboxId) {
-            console.log("Loading XMTP client for:", address);
-            console.log("Stored inbox ID:", storedInboxId);
-
-            // Create client from stored inbox
-            const signer = createEOASigner(address, (message) =>
-              signMessageAsync({ message }),
-            );
-
-            console.log("Creating XMTP client...");
-            const client = await Client.create(signer, {
-              env: "dev",
-              appVersion: "xmtp-miniapp/0",
-              loggingLevel: "info",
-            });
-
-            console.log("XMTP client created successfully");
-            setXmtpClient(client);
-          }
-        } catch (error) {
-          console.error("Error loading XMTP client:", error);
-          alert(
-            `Failed to load XMTP client: ${error.message}\n\n` +
-              `This may be due to browser privacy settings. ` +
-              `Try disabling shields/ad blockers for this site.`,
-          );
-        }
-      } else {
-        setXmtpClient(null);
-        reset();
-      }
-    };
-    loadClient();
-  }, [isConnected, address, signMessageAsync, reset]);
+    // Only clear client when wallet is disconnected
+    if (!isConnected || !address) {
+      console.log("Wallet disconnected, clearing XMTP client");
+      setXmtpClient(null);
+      reset();
+    }
+  }, [isConnected, address, reset]);
 
   // Start streams callback
   const startStreams = useCallback(async () => {
@@ -232,10 +236,10 @@ function App() {
       // Use the hook to create DM with address
       const dm = await createDmWithAddress(recipientAddress);
 
-      if (!dm) {
-        alert("This address is not registered on the XMTP network");
-        return;
-      }
+      // if (!dm) {
+      //   alert("This address is not registered on the XMTP network");
+      //   return;
+      // }
 
       console.log("DM created/retrieved:", dm);
 
