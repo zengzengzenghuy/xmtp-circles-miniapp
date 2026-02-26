@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useAccount } from "wagmi";
 import { useConversation } from "../hooks/useConversation";
 
-function MessageArea({ conversation, xmtpClient }) {
+function MessageArea({ conversation, xmtpClient, onBack, className }) {
   const { address } = useAccount();
   const [inputValue, setInputValue] = useState("");
 
@@ -56,7 +56,7 @@ function MessageArea({ conversation, xmtpClient }) {
 
   if (!conversation) {
     return (
-      <div className="message-area">
+      <div className={`message-area${className ? ` ${className}` : ''}`}>
         <div className="no-conversation">
           <div className="no-conversation-content">
             <h2>Select a conversation</h2>
@@ -88,8 +88,11 @@ function MessageArea({ conversation, xmtpClient }) {
   const avatarText = getAvatarText();
 
   return (
-    <div className="message-area">
+    <div className={`message-area${className ? ` ${className}` : ''}`}>
       <div className="message-area-header">
+        {onBack && (
+          <button className="back-btn" onClick={onBack} aria-label="Back">&#8592;</button>
+        )}
         <div className="conversation-avatar-small">{avatarText}</div>
         <div className="header-info">
           <span className="header-address">{peerAddress}</span>
