@@ -65,29 +65,35 @@ function AccountPage({
                 <p>Choose a wallet to connect to XMTP Chat</p>
 
                 <div className="connector-list">
-                  {availableConnectors.map((connector) => (
-                    <button
-                      key={connector.id}
-                      onClick={() => {
-                        console.log("Connecting to:", connector.name, connector);
-                        connect(
-                          { connector },
-                          {
-                            onSuccess: (data) => {
-                              console.log("Connection successful:", data);
-                            },
-                            onError: (error) => {
-                              console.error("Connection error:", error);
-                              alert(`Connection failed: ${error.message}`);
-                            },
-                          }
-                        );
-                      }}
-                      className="connector-button">
-                      <span className="connector-name">{connector.name}</span>
-                      <span className="connector-arrow">→</span>
-                    </button>
-                  ))}
+                  {availableConnectors.length === 0 ? (
+                    <p style={{ color: "#999", textAlign: "center" }}>
+                      No connectors available. Please check your configuration.
+                    </p>
+                  ) : (
+                    availableConnectors.map((connector) => (
+                      <button
+                        key={connector.id}
+                        onClick={() => {
+                          console.log("Connecting to:", connector.name, connector);
+                          connect(
+                            { connector },
+                            {
+                              onSuccess: (data) => {
+                                console.log("Connection successful:", data);
+                              },
+                              onError: (error) => {
+                                console.error("Connection error:", error);
+                                alert(`Connection failed: ${error.message}`);
+                              },
+                            }
+                          );
+                        }}
+                        className="connector-button">
+                        <span className="connector-name">{connector.name}</span>
+                        <span className="connector-arrow">→</span>
+                      </button>
+                    ))
+                  )}
                 </div>
               </div>
             ) : (
