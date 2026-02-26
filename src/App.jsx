@@ -9,10 +9,9 @@ import NewConversationModal from "./components/NewConversationModal";
 import { createEOASigner, createSCWSigner } from "./helpers/createSigner";
 import {
   isMiniappMode,
-  requestMiniappAddress,
-  onMiniappWalletChange,
-  miniappSignMessage,
-} from "./helpers/miniappWallet";
+  onWalletChange,
+  signMessage,
+} from "@aboutcircles/miniapp-sdk";
 import { useConversations } from "./hooks/useConversations";
 import { useActions } from "./stores/inboxHooks";
 
@@ -51,7 +50,7 @@ function App() {
   // When running inside the newCore iframe host, subscribe to host wallet events
   useEffect(() => {
     if (!isMiniapp) return;
-    const unsubscribe = onMiniappWalletChange((addr) => {
+    const unsubscribe = onWalletChange((addr) => {
       setMiniappAddress(addr);
       if (!addr) {
         // Host wallet disconnected — clear XMTP client
@@ -59,7 +58,6 @@ function App() {
         reset();
       }
     });
-    requestMiniappAddress();
     return unsubscribe;
   }, [isMiniapp]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -116,9 +114,10 @@ function App() {
         console.log("Creating SCW signer for miniapp mode (Gnosis chainId=100)");
         signer = createSCWSigner(
           activeAddress,
-          (message) => {
+          async (message) => {
             console.log("Miniapp SCW Sign message requested:", message);
-            return miniappSignMessage(message);
+            const { signature } = await signMessage(message, "erc1271");
+            return signature;
           },
           100, // Gnosis Chain
         );
