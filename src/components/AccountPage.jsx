@@ -12,6 +12,18 @@ function AccountPage({
   const { disconnect } = useDisconnect();
   const [showConnectors, setShowConnectors] = useState(false);
   const [activeTab, setActiveTab] = useState("connect");
+  const [circlesMode, setCirclesMode] = useState(() => {
+    // Load circles mode from localStorage
+    const saved = localStorage.getItem("circles-mode");
+    return saved === "true";
+  });
+
+  // Save circles mode to localStorage when it changes
+  const handleCirclesModeToggle = () => {
+    const newValue = !circlesMode;
+    setCirclesMode(newValue);
+    localStorage.setItem("circles-mode", String(newValue));
+  };
 
   // Format address for display
   const formatAddress = (addr) => {
@@ -25,6 +37,10 @@ function AccountPage({
       connector.name === "MetaMask" || connector.name === "WalletConnect",
   );
 
+  // Debug: Log available connectors
+  console.log("All connectors:", connectors);
+  console.log("Available connectors:", availableConnectors);
+
   return (
     <div className="account-page">
       <div className="account-tabs">
@@ -32,6 +48,11 @@ function AccountPage({
           className={`account-tab ${activeTab === "connect" ? "active" : ""}`}
           onClick={() => setActiveTab("connect")}>
           Connect
+        </button>
+        <button
+          className={`account-tab ${activeTab === "settings" ? "active" : ""}`}
+          onClick={() => setActiveTab("settings")}>
+          Settings
         </button>
       </div>
 
@@ -47,7 +68,21 @@ function AccountPage({
                   {availableConnectors.map((connector) => (
                     <button
                       key={connector.id}
-                      onClick={() => connect({ connector })}
+                      onClick={() => {
+                        console.log("Connecting to:", connector.name, connector);
+                        connect(
+                          { connector },
+                          {
+                            onSuccess: (data) => {
+                              console.log("Connection successful:", data);
+                            },
+                            onError: (error) => {
+                              console.error("Connection error:", error);
+                              alert(`Connection failed: ${error.message}`);
+                            },
+                          }
+                        );
+                      }}
                       className="connector-button">
                       <span className="connector-name">{connector.name}</span>
                       <span className="connector-arrow">→</span>
@@ -126,6 +161,30 @@ function AccountPage({
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {activeTab === "settings" && (
+          <div className="settings-section">
+            <h2>Settings</h2>
+            <div className="settings-list">
+              <div className="setting-item">
+                <div className="setting-info">
+                  <span className="setting-label">Circles mode(WIP)</span>
+                  <span className="setting-description">
+                    Enabled functionalities powered by Circles
+                  </span>
+                </div>
+                <label className="toggle-switch">
+                  <input
+                    type="checkbox"
+                    checked={circlesMode}
+                    onChange={handleCirclesModeToggle}
+                  />
+                  <span className="toggle-slider"></span>
+                </label>
+              </div>
+            </div>
           </div>
         )}
       </div>

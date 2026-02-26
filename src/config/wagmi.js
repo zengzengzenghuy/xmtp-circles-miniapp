@@ -15,7 +15,7 @@ export const config = createConfig({
       projectId,
       metadata: {
         name: "XMTP Chat",
-        description: "XMTP Chat on Gnosis Chain",
+        description: "XMTP Chat",
         url: "https://circles-miniapps.example.com",
         icons: ["https://circles-miniapps.example.com/icon.png"],
       },

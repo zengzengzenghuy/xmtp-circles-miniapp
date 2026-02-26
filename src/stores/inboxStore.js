@@ -66,17 +66,34 @@ export const useInboxStore = create((set, get) => ({
 
     const newMetadata = new Map(state.metadata);
 
-    // For DMs, get peer info
-    if (conversation.isDm) {
+    // Get peer inbox ID for reference
+    const peerInboxId = conversation.isDm ? await conversation.peerInboxId() : null;
+
+    // For DMs and 2-person conversations, get peer identifier
+    if (conversation.isDm || members.length === 2) {
       const peerMember = members.find(
         (m) => m.inboxId !== conversation.addedByInboxId
       );
       if (peerMember) {
-        // Get peer inbox ID
-        const peerInboxId = await conversation.peerInboxId();
+        // Get peer identifier (Ethereum address)
+        const identifier = peerMember.accountIdentifiers?.[0]?.identifier;
+        if (identifier) {
+          newMetadata.set(conversation.id, {
+            name: identifier.toLowerCase(),
+            peerInboxId: peerInboxId || peerMember.inboxId,
+            identifier: identifier.toLowerCase(),
+          });
+        } else {
+          // Fallback to inbox ID if no identifier found
+          newMetadata.set(conversation.id, {
+            name: peerInboxId || peerMember.inboxId,
+            peerInboxId: peerInboxId || peerMember.inboxId,
+          });
+        }
+      } else {
+        // No peer member found
         newMetadata.set(conversation.id, {
-          name: peerInboxId,
-          peerInboxId,
+          name: conversation.name || "Group",
         });
       }
     } else {
@@ -126,11 +143,14 @@ export const useInboxStore = create((set, get) => ({
       )
     );
 
-    // Get peer inbox IDs for DMs in parallel
+    // Get peer inbox IDs for DMs and 2-person conversations in parallel
     const allPeerInboxIds = new Map(
       await Promise.all(
         conversations
-          .filter((c) => c.isDm)
+          .filter((c) => {
+            const members = allMembers.get(c.id) || [];
+            return c.isDm || members.length === 2;
+          })
           .map(async (conversation) => [
             conversation.id,
             await conversation.peerInboxId(),
@@ -155,13 +175,37 @@ export const useInboxStore = create((set, get) => ({
         new Map(members.map((m) => [m.inboxId, m]))
       );
 
-      if (conversation.isDm) {
-        const peerInboxId = allPeerInboxIds.get(conversation.id);
-        newMetadata.set(conversation.id, {
-          name: peerInboxId,
-          peerInboxId,
-        });
+      const peerInboxId = allPeerInboxIds.get(conversation.id);
+
+      // For DMs and 2-person conversations, get peer identifier
+      if (conversation.isDm || members.length === 2) {
+        const peerMember = members.find(
+          (m) => m.inboxId !== conversation.addedByInboxId
+        );
+        if (peerMember) {
+          // Get peer identifier (Ethereum address)
+          const identifier = peerMember.accountIdentifiers?.[0]?.identifier;
+          if (identifier) {
+            newMetadata.set(conversation.id, {
+              name: identifier.toLowerCase(),
+              peerInboxId: peerInboxId || peerMember.inboxId,
+              identifier: identifier.toLowerCase(),
+            });
+          } else {
+            // Fallback to inbox ID if no identifier found
+            newMetadata.set(conversation.id, {
+              name: peerInboxId || peerMember.inboxId,
+              peerInboxId: peerInboxId || peerMember.inboxId,
+            });
+          }
+        } else {
+          // No peer member found
+          newMetadata.set(conversation.id, {
+            name: conversation.name || "Group",
+          });
+        }
       } else {
+        // For groups, use conversation name
         newMetadata.set(conversation.id, {
           name: conversation.name || "Group",
         });
