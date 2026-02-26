@@ -148,10 +148,11 @@ function ConversationList({
   isLoading,
   onRefresh,
   circlesMode,
+  className,
 }) {
 
   return (
-    <div className="conversation-list">
+    <div className={`conversation-list${className ? ` ${className}` : ''}`}>
       <div className="conversation-list-header">
         <h2>Messages</h2>
         <div style={{ display: "flex", gap: "0.5rem" }}>

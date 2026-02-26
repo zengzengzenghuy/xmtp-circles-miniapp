@@ -71,9 +71,12 @@ export const useInboxStore = create((set, get) => ({
 
     // For DMs and 2-person conversations, get peer identifier
     if (conversation.isDm || members.length === 2) {
-      const peerMember = members.find(
-        (m) => m.inboxId !== conversation.addedByInboxId
-      );
+      // Use peerInboxId (reliable regardless of who initiated) to find the peer member.
+      // Falling back to "not the creator" (addedByInboxId) is wrong when the other
+      // party started the conversation — it would resolve to our own member.
+      const peerMember = peerInboxId
+        ? members.find((m) => m.inboxId === peerInboxId)
+        : members.find((m) => m.inboxId !== conversation.addedByInboxId);
       if (peerMember) {
         // Get peer identifier (Ethereum address)
         const identifier = peerMember.accountIdentifiers?.[0]?.identifier;
@@ -179,9 +182,9 @@ export const useInboxStore = create((set, get) => ({
 
       // For DMs and 2-person conversations, get peer identifier
       if (conversation.isDm || members.length === 2) {
-        const peerMember = members.find(
-          (m) => m.inboxId !== conversation.addedByInboxId
-        );
+        const peerMember = peerInboxId
+          ? members.find((m) => m.inboxId === peerInboxId)
+          : members.find((m) => m.inboxId !== conversation.addedByInboxId);
         if (peerMember) {
           // Get peer identifier (Ethereum address)
           const identifier = peerMember.accountIdentifiers?.[0]?.identifier;

@@ -7,12 +7,23 @@ import BottomTabs from "./components/BottomTabs";
 import AccountPage from "./components/AccountPage";
 import NewConversationModal from "./components/NewConversationModal";
 import { createEOASigner, createSCWSigner } from "./helpers/createSigner";
+import {
+  isMiniappMode,
+  requestMiniappAddress,
+  onMiniappWalletChange,
+  miniappSignMessage,
+} from "./helpers/miniappWallet";
 import { useConversations } from "./hooks/useConversations";
 import { useActions } from "./stores/inboxHooks";
 
 function App() {
   const { address, isConnected, connector, chainId } = useAccount();
   const { signMessageAsync } = useSignMessage();
+
+  // Miniapp mode: running inside newCore iframe host
+  const isMiniapp = isMiniappMode();
+  const [miniappAddress, setMiniappAddress] = useState(null);
+
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [activeTab, setActiveTab] = useState("chat");
   const [isNewConversationModalOpen, setIsNewConversationModalOpen] =
@@ -32,6 +43,25 @@ function App() {
     setCirclesMode(newValue);
     localStorage.setItem("circles-mode", String(newValue));
   };
+
+  // Derived effective wallet state (miniapp or wagmi)
+  const effectiveAddress = isMiniapp ? miniappAddress : address;
+  const effectiveConnected = isMiniapp ? !!miniappAddress : isConnected;
+
+  // When running inside the newCore iframe host, subscribe to host wallet events
+  useEffect(() => {
+    if (!isMiniapp) return;
+    const unsubscribe = onMiniappWalletChange((addr) => {
+      setMiniappAddress(addr);
+      if (!addr) {
+        // Host wallet disconnected — clear XMTP client
+        setXmtpClient(null);
+        reset();
+      }
+    });
+    requestMiniappAddress();
+    return unsubscribe;
+  }, [isMiniapp]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Use hooks for conversations management
   const {
@@ -53,14 +83,18 @@ function App() {
 
   // Create or load XMTP inbox
   const handleCreateInbox = async () => {
+    const activeAddress = effectiveAddress;
+    const activeConnected = effectiveConnected;
+
     console.log("handleCreateInbox called", {
-      address,
-      isConnected,
+      address: activeAddress,
+      isConnected: activeConnected,
+      isMiniapp,
       connector: connector?.name,
       chainId,
     });
 
-    if (!address || !isConnected) {
+    if (!activeAddress || !activeConnected) {
       console.log("Missing address or not connected");
       return;
     }
@@ -71,32 +105,48 @@ function App() {
     try {
       // Check if there's an existing stored inbox ID
       const storedInboxId = localStorage.getItem(
-        `xmtp-inbox-${address.toLowerCase()}`,
+        `xmtp-inbox-${activeAddress.toLowerCase()}`,
       );
 
-      // Determine if we should use SCW signer (for WalletConnect)
-      const isWalletConnect = connector?.name === "WalletConnect";
-      const useChainId = chainId || 1; // Default to mainnet if chainId is not available
+      let signer;
 
-      console.log("Creating signer...", {
-        isWalletConnect,
-        useChainId,
-        hasStoredInbox: !!storedInboxId,
-      });
+      if (isMiniapp) {
+        // Running inside newCore host — use Safe SCW signer via postMessage
+        // The host's Safe wallet produces ERC-1271-compatible EIP-712 SafeMessage signatures
+        console.log("Creating SCW signer for miniapp mode (Gnosis chainId=100)");
+        signer = createSCWSigner(
+          activeAddress,
+          (message) => {
+            console.log("Miniapp SCW Sign message requested:", message);
+            return miniappSignMessage(message);
+          },
+          100, // Gnosis Chain
+        );
+      } else {
+        // Standalone mode — use wagmi connectors
+        const isWalletConnect = connector?.name === "WalletConnect";
+        const useChainId = chainId || 1;
 
-      const signer = isWalletConnect
-        ? createSCWSigner(
-            address,
-            (message) => {
-              console.log("SCW Sign message requested:", message);
+        console.log("Creating signer...", {
+          isWalletConnect,
+          useChainId,
+          hasStoredInbox: !!storedInboxId,
+        });
+
+        signer = isWalletConnect
+          ? createSCWSigner(
+              activeAddress,
+              (message) => {
+                console.log("SCW Sign message requested:", message);
+                return signMessageAsync({ message });
+              },
+              useChainId,
+            )
+          : createEOASigner(activeAddress, (message) => {
+              console.log("EOA Sign message requested:", message);
               return signMessageAsync({ message });
-            },
-            useChainId,
-          )
-        : createEOASigner(address, (message) => {
-            console.log("EOA Sign message requested:", message);
-            return signMessageAsync({ message });
-          });
+            });
+      }
 
       if (storedInboxId) {
         console.log("Loading existing XMTP client...");
@@ -116,7 +166,7 @@ function App() {
       // Store inbox ID in localStorage if it's a new inbox
       if (!storedInboxId) {
         localStorage.setItem(
-          `xmtp-inbox-${address.toLowerCase()}`,
+          `xmtp-inbox-${activeAddress.toLowerCase()}`,
           client.inboxId,
         );
         console.log("New inbox ID stored");
@@ -152,15 +202,16 @@ function App() {
     }
   };
 
-  // Handle wallet disconnection
+  // Handle wallet disconnection (wagmi standalone mode only;
+  // miniapp disconnection is handled in the onMiniappWalletChange effect)
   useEffect(() => {
-    // Only clear client when wallet is disconnected
+    if (isMiniapp) return;
     if (!isConnected || !address) {
       console.log("Wallet disconnected, clearing XMTP client");
       setXmtpClient(null);
       reset();
     }
-  }, [isConnected, address, reset]);
+  }, [isMiniapp, isConnected, address, reset]);
 
   // Start streams callback
   const startStreams = useCallback(async () => {
@@ -265,9 +316,9 @@ function App() {
         <div className="header-content">
           <div className="header-left">
             <h1>XMTP Chat</h1>
-            {isConnected && address && (
+            {effectiveConnected && effectiveAddress && (
               <div className="connected-address">
-                <span className="address-value">{formatAddress(address)}</span>
+                <span className="address-value">{formatAddress(effectiveAddress)}</span>
               </div>
             )}
           </div>
@@ -289,13 +340,15 @@ function App() {
 
       <div className="app-content">
         {activeTab === "chat" ? (
-          !isConnected ? (
+          !effectiveConnected ? (
             <div className="connect-prompt">
               <div className="connect-card">
                 <h2>Welcome to XMTP Chat</h2>
                 <p>Connect your wallet to start messaging</p>
                 <p className="connect-hint">
-                  Go to Account tab to connect your wallet
+                  {isMiniapp
+                    ? "Waiting for host wallet connection..."
+                    : "Go to Account tab to connect your wallet"}
                 </p>
               </div>
             </div>
@@ -319,10 +372,13 @@ function App() {
                 isLoading={isLoadingConversations}
                 onRefresh={syncConversations}
                 circlesMode={circlesMode}
+                className={selectedConversation ? "hidden-mobile" : ""}
               />
               <MessageArea
                 conversation={selectedConversation}
                 xmtpClient={xmtpClient}
+                onBack={() => setSelectedConversation(null)}
+                className={!selectedConversation ? "hidden-mobile" : ""}
               />
             </div>
           )
@@ -334,6 +390,9 @@ function App() {
             onCreateInbox={handleCreateInbox}
             circlesMode={circlesMode}
             onCirclesModeToggle={handleCirclesModeToggle}
+            address={effectiveAddress}
+            isConnected={effectiveConnected}
+            isMiniapp={isMiniapp}
           />
         )}
       </div>
