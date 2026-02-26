@@ -1,130 +1,51 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useAccount } from "wagmi";
-import { ContentTypeText } from "@xmtp/content-type-text";
+import { useConversation } from "../hooks/useConversation";
 
 function MessageArea({ conversation, xmtpClient }) {
   const { address } = useAccount();
   const [inputValue, setInputValue] = useState("");
-  const [messages, setMessages] = useState([]);
-  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
-  const [isSending, setIsSending] = useState(false);
-  const [peerInboxId, setPeerInboxId] = useState(null);
 
-  // Load peer inbox ID for DM
+  // Use the conversation hook to get messages and send functionality
+  const {
+    messages,
+    name,
+    peerInboxId,
+    sync,
+    sendText,
+    sending: isSending,
+    loading: isLoadingMessages,
+  } = useConversation(conversation?.id || "");
+
+  // Load messages when conversation changes
   useEffect(() => {
-    const loadPeerInboxId = async () => {
-      if (conversation && typeof conversation.peerInboxId === "function") {
-        try {
-          const peerId = await conversation.peerInboxId();
-          setPeerInboxId(peerId);
-        } catch (error) {
-          console.error("Error getting peer inbox ID:", error);
-        }
-      }
-    };
-
-    if (conversation) {
-      loadPeerInboxId();
-    } else {
-      setPeerInboxId(null);
-    }
-  }, [conversation]);
-
-  // Fetch messages when conversation changes
-  useEffect(() => {
-    if (!conversation || !xmtpClient) {
-      setMessages([]);
-      return;
-    }
+    if (!conversation) return;
 
     const loadMessages = async () => {
-      setIsLoadingMessages(true);
       try {
-        // Sync messages for this conversation
-        await conversation.sync();
-
-        // Get messages
-        const msgs = await conversation.messages();
-        console.log("Loaded messages:", msgs);
-
-        // Filter out metadata/system messages - only show actual content messages
-        const textMessages = msgs.filter((msg) => {
-          // Check if it's a text message (not a group metadata update)
-          const isTextMessage =
-            typeof msg.content === "string" ||
-            msg.content instanceof Uint8Array ||
-            (msg.content &&
-              !msg.content.addedInboxes &&
-              (msg.content.content || msg.content.contentType));
-          return isTextMessage;
-        });
-
-        console.log("Filtered text messages:", textMessages);
-        setMessages(textMessages);
+        // Sync messages for this conversation from network
+        await sync(true);
+        console.log("Loaded messages for conversation:", conversation.id);
       } catch (error) {
         console.error("Error loading messages:", error);
-      } finally {
-        setIsLoadingMessages(false);
       }
     };
 
     loadMessages();
-
-    // Stream new messages for this conversation
-    const startStream = async () => {
-      try {
-        const stream = await xmtpClient.conversation.streamAllMessages({
-          onValue: (message) => {
-            console.log("New message:", message);
-
-            // Filter out metadata/system messages
-            const isTextMessage =
-              typeof message.content === "string" ||
-              message.content instanceof Uint8Array ||
-              (message.content &&
-                !message.content.addedInboxes &&
-                (message.content.content || message.content.contentType));
-
-            if (isTextMessage) {
-              setMessages((prev) => {
-                const exists = prev.some((m) => m.id === message.id);
-                if (exists) return prev;
-                return [...prev, message];
-              });
-            }
-          },
-        });
-
-        return () => {
-          stream.end();
-        };
-      } catch (error) {
-        console.error("Error streaming messages:", error);
-      }
-    };
-
-    const cleanup = startStream();
-
-    return () => {
-      cleanup.then((fn) => fn && fn());
-    };
-  }, [conversation, xmtpClient]);
+  }, [conversation, sync]);
 
   const handleSend = useCallback(async () => {
     if (!inputValue.trim() || !conversation || isSending) return;
 
-    setIsSending(true);
     try {
-      // Send text message using ContentTypeText codec
-      await conversation.sendText(inputValue);
+      // Send text message using the hook's sendText method
+      await sendText(inputValue);
       setInputValue("");
     } catch (error) {
       console.error("Error sending message:", error);
       alert(`Failed to send message: ${error.message}`);
-    } finally {
-      setIsSending(false);
     }
-  }, [inputValue, conversation, isSending]);
+  }, [inputValue, conversation, isSending, sendText]);
 
   const handleKeyPress = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -146,12 +67,12 @@ function MessageArea({ conversation, xmtpClient }) {
     );
   }
 
-  // Use the loaded peerInboxId or conversation name
+  // Use the metadata from store
   const peerAddress = peerInboxId
     ? String(peerInboxId).slice(0, 12) + "..."
-    : conversation.name
-      ? String(conversation.name)
-      : conversation.id
+    : name
+      ? String(name)
+      : conversation?.id
         ? String(conversation.id).slice(0, 8) + "..."
         : "Unknown";
 

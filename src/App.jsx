@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useAccount, useSignMessage } from "wagmi";
 import { Client, IdentifierKind } from "@xmtp/browser-sdk";
 import ConversationList from "./components/ConversationList";
@@ -7,6 +7,8 @@ import BottomTabs from "./components/BottomTabs";
 import AccountPage from "./components/AccountPage";
 import NewConversationModal from "./components/NewConversationModal";
 import { createEOASigner } from "./helpers/createSigner";
+import { useConversations } from "./hooks/useConversations";
+import { useActions } from "./stores/inboxHooks";
 
 function App() {
   const { address, isConnected } = useAccount();
@@ -16,9 +18,24 @@ function App() {
   const [isNewConversationModalOpen, setIsNewConversationModalOpen] =
     useState(false);
   const [xmtpClient, setXmtpClient] = useState(null);
-  const [conversations, setConversations] = useState([]);
-  const [isLoadingConversations, setIsLoadingConversations] = useState(false);
-  const [conversationStream, setConversationStream] = useState(null);
+
+  // Use hooks for conversations management
+  const {
+    conversations,
+    sync,
+    syncAll,
+    loading: isLoadingConversations,
+    syncing,
+    stream,
+    streamAllMessages,
+    createDmWithAddress,
+  } = useConversations(xmtpClient);
+
+  const { reset } = useActions();
+
+  // Refs for stream cleanup
+  const stopConversationStreamRef = useRef(null);
+  const stopAllMessagesStreamRef = useRef(null);
 
   // Load XMTP client on mount
   useEffect(() => {
@@ -44,70 +61,62 @@ function App() {
         }
       } else {
         setXmtpClient(null);
-        setConversations([]);
+        reset();
       }
     };
     loadClient();
-  }, [isConnected, address, signMessageAsync]);
+  }, [isConnected, address, signMessageAsync, reset]);
 
-  // Sync conversations when client is available
-  const syncConversations = useCallback(async () => {
+  // Start streams callback
+  const startStreams = useCallback(async () => {
     if (!xmtpClient) return;
 
-    setIsLoadingConversations(true);
     try {
-      // Sync from network
-      await xmtpClient.conversations.sync();
-
-      // Get list of conversations
-      const convos = await xmtpClient.conversations.listDms();
-      console.log("Synced conversations:", convos);
-      setConversations(convos);
+      stopConversationStreamRef.current = await stream();
+      stopAllMessagesStreamRef.current = await streamAllMessages();
     } catch (error) {
-      console.error("Error syncing conversations:", error);
-    } finally {
-      setIsLoadingConversations(false);
+      console.error("Error starting streams:", error);
     }
-  }, [xmtpClient]);
+  }, [xmtpClient, stream, streamAllMessages]);
 
-  // Sync conversations on client load
-  useEffect(() => {
-    if (xmtpClient) {
-      syncConversations();
+  // Stop streams callback
+  const stopStreams = useCallback(() => {
+    if (stopConversationStreamRef.current) {
+      stopConversationStreamRef.current();
+      stopConversationStreamRef.current = null;
     }
-  }, [xmtpClient, syncConversations]);
+    if (stopAllMessagesStreamRef.current) {
+      stopAllMessagesStreamRef.current();
+      stopAllMessagesStreamRef.current = null;
+    }
+  }, []);
 
-  // Stream new conversations
+  // Sync conversations with optional network refresh
+  const syncConversations = useCallback(
+    async (fromNetwork = false) => {
+      stopStreams();
+      await sync(fromNetwork);
+      await startStreams();
+    },
+    [sync, startStreams, stopStreams]
+  );
+
+  // Initial sync and stream setup when client is loaded
   useEffect(() => {
     if (!xmtpClient) return;
 
-    const startStream = async () => {
-      try {
-        const stream = await xmtpClient.conversations.stream({
-          onValue: (conversation) => {
-            console.log("New conversation:", conversation);
-            setConversations((prev) => {
-              // Check if conversation already exists
-              const exists = prev.some((c) => c.id === conversation.id);
-              if (exists) return prev;
-              return [conversation, ...prev];
-            });
-          },
-        });
-        setConversationStream(stream);
-      } catch (error) {
-        console.error("Error starting conversation stream:", error);
-      }
+    const loadConversations = async () => {
+      await sync(true);
+      await startStreams();
     };
 
-    startStream();
+    loadConversations();
 
+    // Cleanup streams on unmount or client change
     return () => {
-      if (conversationStream) {
-        conversationStream.end();
-      }
+      stopStreams();
     };
-  }, [xmtpClient]);
+  }, [xmtpClient, sync, startStreams, stopStreams]);
 
   const handleSelectConversation = (conversation) => {
     setSelectedConversation(conversation);
@@ -129,53 +138,15 @@ function App() {
 
       console.log("Creating DM with:", recipientAddress);
 
-      // Check if the address is registered on XMTP by fetching inbox ID
-      // Note: fetchInboxIdByIdentifier might not exist in all SDK versions
-      // If it fails, we'll catch the error and handle it
-      let inboxId;
-      try {
-        inboxId = await xmtpClient.fetchInboxIdByIdentifier({
-          identifier: recipientAddress,
-          identifierKind: IdentifierKind.Ethereum,
-        });
-        console.log("Inbox ID result:", inboxId);
-      } catch (fetchError) {
-        console.log(
-          "fetchInboxIdByIdentifier not available, trying alternate method",
-        );
-        // Fallback: try canMessage to validate, then use address directly
-        const canMessageResult = await xmtpClient.canMessage([
-          recipientAddress,
-        ]);
-        if (!canMessageResult || !canMessageResult[recipientAddress]) {
-          alert("This address is not registered on the XMTP network");
-          return;
-        }
-        // Use address as inbox ID (SDK might handle conversion internally)
-        inboxId = recipientAddress;
-      }
+      // Use the hook to create DM with address
+      const dm = await createDmWithAddress(recipientAddress);
 
-      if (!inboxId) {
-        console.error("Recipient not registered on XMTP");
+      if (!dm) {
         alert("This address is not registered on the XMTP network");
         return;
       }
 
-      // According to MESSAGE_GUIDE.md, use createDm() with inbox ID
-      // This will create the DM if it doesn't exist, or return the existing one
-      console.log("Creating/getting DM with inbox ID:", inboxId);
-      const dm = await xmtpClient.conversations.createDm(inboxId);
       console.log("DM created/retrieved:", dm);
-
-      // Sync to ensure conversation is in local DB
-      await xmtpClient.conversations.sync();
-
-      // Add to conversations list if not already there
-      setConversations((prev) => {
-        const exists = prev.some((c) => c.id === dm.id);
-        if (exists) return prev;
-        return [dm, ...prev];
-      });
 
       // Select the new conversation
       setSelectedConversation(dm);
