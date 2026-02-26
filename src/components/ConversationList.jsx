@@ -11,11 +11,17 @@ function ConversationItem({
 
   // Helper to get peer address from metadata
   const getPeerAddress = () => {
-    if (metadata.peerInboxId) {
-      return String(metadata.peerInboxId).slice(0, 8) + "...";
+    // Prefer identifier (Ethereum address) which is now in metadata.name
+    if (metadata.identifier || (metadata.name && metadata.name.startsWith('0x'))) {
+      const addr = metadata.identifier || metadata.name;
+      // Format as 0x1234...5678
+      return String(addr).slice(0, 6) + "..." + String(addr).slice(-4);
     }
     if (metadata.name) {
       return String(metadata.name);
+    }
+    if (metadata.peerInboxId) {
+      return String(metadata.peerInboxId).slice(0, 8) + "...";
     }
     // Fallback to conversation ID
     return conversation.id
@@ -25,11 +31,17 @@ function ConversationItem({
 
   const peerAddress = getPeerAddress();
   const isGroup = conversation.metadata?.conversationType === "group";
-  // Get avatar initials safely
-  const avatarText =
-    peerAddress && peerAddress.length >= 2
+
+  // Get avatar initials safely - for addresses, skip the "0x" prefix
+  const getAvatarText = () => {
+    if (peerAddress.startsWith('0x')) {
+      return peerAddress.slice(2, 4).toUpperCase();
+    }
+    return peerAddress && peerAddress.length >= 2
       ? peerAddress.slice(0, 2).toUpperCase()
       : "??";
+  };
+  const avatarText = getAvatarText();
 
   return (
     <div

@@ -67,20 +67,25 @@ function MessageArea({ conversation, xmtpClient }) {
     );
   }
 
-  // Use the metadata from store
-  const peerAddress = peerInboxId
-    ? String(peerInboxId).slice(0, 12) + "..."
-    : name
-      ? String(name)
+  // Use the metadata from store - prefer name (which is now the identifier address)
+  const peerAddress = name
+    ? String(name).slice(0, 6) + "..." + String(name).slice(-4)
+    : peerInboxId
+      ? String(peerInboxId).slice(0, 12) + "..."
       : conversation?.id
         ? String(conversation.id).slice(0, 8) + "..."
         : "Unknown";
 
-  // Get avatar initials safely
-  const avatarText =
-    peerAddress && peerAddress.length >= 2
+  // Get avatar initials safely - for addresses, skip the "0x" prefix
+  const getAvatarText = () => {
+    if (peerAddress.startsWith('0x')) {
+      return peerAddress.slice(2, 4).toUpperCase();
+    }
+    return peerAddress && peerAddress.length >= 2
       ? peerAddress.slice(0, 2).toUpperCase()
       : "??";
+  };
+  const avatarText = getAvatarText();
 
   return (
     <div className="message-area">
@@ -104,43 +109,60 @@ function MessageArea({ conversation, xmtpClient }) {
             </p>
           </div>
         ) : (
-          messages.map((message) => {
-            const isSent = message.senderInboxId === xmtpClient?.inboxId;
-            const timestamp = new Date(Number(message.sentAtNs) / 1_000_000);
-
-            // Decode message content
-            let messageText = "";
-            if (typeof message.content === "string") {
-              messageText = message.content;
-            } else if (message.content instanceof Uint8Array) {
-              messageText = new TextDecoder().decode(message.content);
-            } else if (message.content?.content) {
-              // If content is an object with a content property
-              if (message.content.content instanceof Uint8Array) {
-                messageText = new TextDecoder().decode(message.content.content);
-              } else {
-                messageText = String(message.content.content);
+          messages
+            .filter((message) => {
+              // Filter out system messages (membership updates, etc.)
+              // System messages typically have structured objects with fields like
+              // addedInboxes, removedInboxes, etc.
+              if (typeof message.content === "object" && message.content !== null) {
+                // Check if it's a membership/system message by looking for specific fields
+                if (
+                  message.content.addedInboxes ||
+                  message.content.removedInboxes ||
+                  message.content.initiatedByInboxId
+                ) {
+                  return false; // Skip system messages
+                }
               }
-            } else {
-              messageText = JSON.stringify(message.content);
-            }
+              return true; // Show all other messages
+            })
+            .map((message) => {
+              const isSent = message.senderInboxId === xmtpClient?.inboxId;
+              const timestamp = new Date(Number(message.sentAtNs) / 1_000_000);
 
-            return (
-              <div
-                key={message.id}
-                className={`message ${isSent ? "sent" : "received"}`}>
-                <div className="message-content">
-                  <div className="message-text">{messageText}</div>
-                  <div className="message-timestamp">
-                    {timestamp.toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+              // Decode message content
+              let messageText = "";
+              if (typeof message.content === "string") {
+                messageText = message.content;
+              } else if (message.content instanceof Uint8Array) {
+                messageText = new TextDecoder().decode(message.content);
+              } else if (message.content?.content) {
+                // If content is an object with a content property
+                if (message.content.content instanceof Uint8Array) {
+                  messageText = new TextDecoder().decode(message.content.content);
+                } else {
+                  messageText = String(message.content.content);
+                }
+              } else {
+                messageText = JSON.stringify(message.content);
+              }
+
+              return (
+                <div
+                  key={message.id}
+                  className={`message ${isSent ? "sent" : "received"}`}>
+                  <div className="message-content">
+                    <div className="message-text">{messageText}</div>
+                    <div className="message-timestamp">
+                      {timestamp.toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })
+              );
+            })
         )}
       </div>
 

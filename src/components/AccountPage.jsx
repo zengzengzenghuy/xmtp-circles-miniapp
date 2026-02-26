@@ -1,18 +1,17 @@
-import React, { useState, useEffect } from "react";
-import { useAccount, useConnect, useDisconnect, useSignMessage } from "wagmi";
-import { Client, LogLevel } from "@xmtp/browser-sdk";
-import { createEOASigner } from "../helpers/createSigner";
+import React, { useState } from "react";
+import { useAccount, useConnect, useDisconnect } from "wagmi";
 
-function AccountPage() {
+function AccountPage({
+  xmtpClient,
+  isCreatingInbox,
+  inboxError,
+  onCreateInbox,
+}) {
   const { address, isConnected } = useAccount();
   const { connectors, connect } = useConnect();
   const { disconnect } = useDisconnect();
-  const { signMessageAsync } = useSignMessage();
   const [showConnectors, setShowConnectors] = useState(false);
   const [activeTab, setActiveTab] = useState("connect");
-  const [xmtpClient, setXmtpClient] = useState(null);
-  const [isCreatingInbox, setIsCreatingInbox] = useState(false);
-  const [inboxError, setInboxError] = useState(null);
 
   // Format address for display
   const formatAddress = (addr) => {
@@ -25,107 +24,6 @@ function AccountPage() {
     (connector) =>
       connector.name === "MetaMask" || connector.name === "WalletConnect",
   );
-
-  // Load XMTP client from localStorage on mount
-  useEffect(() => {
-    const loadClient = async () => {
-      if (isConnected && address) {
-        try {
-          // Check if client exists in localStorage
-          const storedInboxId = localStorage.getItem(
-            `xmtp-inbox-${address.toLowerCase()}`,
-          );
-          if (storedInboxId) {
-            // Client was previously created, we can show it as connected
-            setXmtpClient({ inboxId: storedInboxId });
-          }
-        } catch (error) {
-          console.error("Error loading XMTP client:", error);
-        }
-      } else {
-        setXmtpClient(null);
-      }
-    };
-    loadClient();
-  }, [isConnected, address]);
-
-  // Create XMTP inbox
-  const handleCreateInbox = async () => {
-    console.log("handleCreateInbox called", { address, isConnected });
-
-    if (!address || !isConnected) {
-      console.log("Missing address or not connected");
-      return;
-    }
-
-    setIsCreatingInbox(true);
-    setInboxError(null);
-
-    try {
-      console.log("Creating signer...");
-      // Create signer
-      const signer = createEOASigner(address, (message) => {
-        console.log("Sign message requested:", message);
-        return signMessageAsync({ message });
-      });
-
-      console.log("Signer created, calling Client.create...");
-      console.log("Signer object:", signer);
-      console.log(
-        "Testing signer.getIdentifier():",
-        await signer.getIdentifier(),
-      );
-
-      // Add timeout to detect hanging
-      const createClientWithTimeout = Promise.race([
-        (async () => {
-          console.log("Starting Client.create with options:", {
-            env: "dev",
-            appVersion: "xmtp-miniapp/0",
-          });
-          const client = await Client.create(signer, {
-            env: "dev", // Use dev environment
-            dbEncryptionKey: undefined,
-            appVersion: "xmtp-miniapp/0",
-            loggingLevel: LogLevel.Debug, // Enable debug logging
-          });
-          console.log("Client.create completed");
-          return client;
-        })(),
-        new Promise((_, reject) =>
-          setTimeout(() => {
-            console.error("Client.create timed out!");
-            reject(new Error("Client creation timed out after 60 seconds"));
-          }, 60000),
-        ),
-      ]);
-
-      const client = await createClientWithTimeout;
-
-      console.log("Client created:", client);
-
-      // Store inbox ID in localStorage
-      localStorage.setItem(
-        `xmtp-inbox-${address.toLowerCase()}`,
-        client.inboxId,
-      );
-
-      setXmtpClient(client);
-      console.log("Inbox created successfully");
-    } catch (error) {
-      console.error("Error creating XMTP inbox:", error);
-      console.error("Error stack:", error.stack);
-      setInboxError(error.message || "Failed to create inbox");
-    } finally {
-      setIsCreatingInbox(false);
-    }
-  };
-
-  // Handle disconnect
-  const handleDisconnect = () => {
-    disconnect();
-    setXmtpClient(null);
-  };
 
   return (
     <div className="account-page">
@@ -171,7 +69,7 @@ function AccountPage() {
 
                   {xmtpClient ? (
                     <div className="inbox-status-box">
-                      <span className="inbox-status-label">XMTP Inbox</span>
+                      <span className="inbox-status-label">XMTP Inbox ID</span>
                       <span className="inbox-status-connected">
                         ✓ Connected
                       </span>
@@ -179,29 +77,50 @@ function AccountPage() {
                     </div>
                   ) : (
                     <div className="inbox-create-box">
-                      <span className="inbox-label">XMTP Inbox</span>
+                      <span className="inbox-label">XMTP Inbox ID</span>
                       <p className="inbox-description">
-                        Create your XMTP inbox to start sending and receiving
+                        Create your XMTP inbox ID to start sending and receiving
                         messages. You'll be asked to sign a message to verify
                         your wallet.
                       </p>
+                      {navigator.userAgent.includes("Brave") && (
+                        <div
+                          className="inbox-warning"
+                          style={{
+                            padding: "10px",
+                            marginBottom: "10px",
+                            backgroundColor: "#fff3cd",
+                            border: "1px solid #ffc107",
+                            borderRadius: "4px",
+                            fontSize: "0.9em",
+                          }}>
+                          <strong>⚠️ Brave Browser Detected</strong>
+                          <br />
+                          If connection fails, disable Brave Shields
+                          fingerprinting protection for this site.
+                        </div>
+                      )}
                       <button
                         className="create-inbox-button"
-                        onClick={handleCreateInbox}
+                        onClick={onCreateInbox}
                         disabled={isCreatingInbox}>
                         {isCreatingInbox
                           ? "Connecting to XMTP..."
                           : "Connect to XMTP"}
                       </button>
                       {inboxError && (
-                        <div className="inbox-error">{inboxError}</div>
+                        <div
+                          className="inbox-error"
+                          style={{ whiteSpace: "pre-wrap" }}>
+                          {inboxError}
+                        </div>
                       )}
                     </div>
                   )}
 
                   <button
                     className="disconnect-button"
-                    onClick={handleDisconnect}>
+                    onClick={() => disconnect()}>
                     Disconnect
                   </button>
                 </div>

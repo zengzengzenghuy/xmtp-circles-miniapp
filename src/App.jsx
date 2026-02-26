@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useAccount, useSignMessage } from "wagmi";
-import { Client, IdentifierKind } from "@xmtp/browser-sdk";
+import { Client, IdentifierKind, LogLevel } from "@xmtp/browser-sdk";
 import ConversationList from "./components/ConversationList";
 import MessageArea from "./components/MessageArea";
 import BottomTabs from "./components/BottomTabs";
@@ -18,6 +18,8 @@ function App() {
   const [isNewConversationModalOpen, setIsNewConversationModalOpen] =
     useState(false);
   const [xmtpClient, setXmtpClient] = useState(null);
+  const [isCreatingInbox, setIsCreatingInbox] = useState(false);
+  const [inboxError, setInboxError] = useState(null);
 
   // Use hooks for conversations management
   const {
@@ -37,6 +39,70 @@ function App() {
   const stopConversationStreamRef = useRef(null);
   const stopAllMessagesStreamRef = useRef(null);
 
+  // Create XMTP inbox
+  const handleCreateInbox = async () => {
+    console.log("handleCreateInbox called", { address, isConnected });
+
+    if (!address || !isConnected) {
+      console.log("Missing address or not connected");
+      return;
+    }
+
+    setIsCreatingInbox(true);
+    setInboxError(null);
+
+    try {
+      console.log("Creating signer...");
+      const signer = createEOASigner(address, (message) => {
+        console.log("Sign message requested:", message);
+        return signMessageAsync({ message });
+      });
+
+      console.log("Signer created, calling Client.create...");
+
+      const client = await Client.create(signer, {
+        env: "dev",
+        dbEncryptionKey: undefined,
+        appVersion: "xmtp-miniapp/0",
+        loggingLevel: LogLevel.Debug,
+      });
+
+      console.log("Client created:", client);
+
+      // Store inbox ID in localStorage
+      localStorage.setItem(
+        `xmtp-inbox-${address.toLowerCase()}`,
+        client.inboxId,
+      );
+
+      setXmtpClient(client);
+      console.log("Inbox created successfully");
+    } catch (error) {
+      console.error("Error creating XMTP inbox:", error);
+      console.error("Error stack:", error.stack);
+
+      let errorMessage = error.message || "Failed to create inbox";
+
+      // Add helpful guidance for common issues
+      if (
+        errorMessage.includes("timeout") ||
+        errorMessage.includes("timed out")
+      ) {
+        errorMessage +=
+          "\n\nIf using Brave browser:\n" +
+          "1. Click the Brave Shields icon (lion) in the address bar\n" +
+          "2. Click 'Advanced View'\n" +
+          "3. Turn OFF 'Block fingerprinting'\n" +
+          "4. Refresh the page and try again\n\n" +
+          "Or try Chrome/Firefox which have better compatibility.";
+      }
+
+      setInboxError(errorMessage);
+    } finally {
+      setIsCreatingInbox(false);
+    }
+  };
+
   // Load XMTP client on mount
   useEffect(() => {
     const loadClient = async () => {
@@ -46,18 +112,31 @@ function App() {
             `xmtp-inbox-${address.toLowerCase()}`,
           );
           if (storedInboxId) {
+            console.log("Loading XMTP client for:", address);
+            console.log("Stored inbox ID:", storedInboxId);
+
             // Create client from stored inbox
             const signer = createEOASigner(address, (message) =>
               signMessageAsync({ message }),
             );
+
+            console.log("Creating XMTP client...");
             const client = await Client.create(signer, {
               env: "dev",
               appVersion: "xmtp-miniapp/0",
+              loggingLevel: "info",
             });
+
+            console.log("XMTP client created successfully");
             setXmtpClient(client);
           }
         } catch (error) {
           console.error("Error loading XMTP client:", error);
+          alert(
+            `Failed to load XMTP client: ${error.message}\n\n` +
+              `This may be due to browser privacy settings. ` +
+              `Try disabling shields/ad blockers for this site.`,
+          );
         }
       } else {
         setXmtpClient(null);
@@ -98,7 +177,7 @@ function App() {
       await sync(fromNetwork);
       await startStreams();
     },
-    [sync, startStreams, stopStreams]
+    [sync, startStreams, stopStreams],
   );
 
   // Initial sync and stream setup when client is loaded
@@ -195,7 +274,7 @@ function App() {
             <div className="connect-prompt">
               <div className="connect-card">
                 <h2>Connect to XMTP</h2>
-                <p>Create your XMTP inbox to start messaging</p>
+                <p>Create your XMTP inbox ID to start messaging</p>
                 <p className="connect-hint">
                   Go to Account tab to connect to XMTP
                 </p>
@@ -218,7 +297,12 @@ function App() {
             </div>
           )
         ) : (
-          <AccountPage />
+          <AccountPage
+            xmtpClient={xmtpClient}
+            isCreatingInbox={isCreatingInbox}
+            inboxError={inboxError}
+            onCreateInbox={handleCreateInbox}
+          />
         )}
       </div>
 
