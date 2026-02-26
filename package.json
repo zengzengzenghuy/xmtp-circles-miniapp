@@ -11,6 +11,8 @@
     "@metamask/sdk": "^0.33.1",
     "@tanstack/react-query": "^5.90.21",
     "@wagmi/connectors": "^7.2.1",
+    "@walletconnect/ethereum-provider": "^2.23.6",
+    "@walletconnect/modal": "^2.7.0",
     "@xmtp/browser-sdk": "6.3.0",
     "@xmtp/content-type-text": "^2.0.2",
     "react": "^18.3.1",
