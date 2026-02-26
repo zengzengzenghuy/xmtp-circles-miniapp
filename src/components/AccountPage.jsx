@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
 
 function AccountPage({
@@ -6,24 +6,61 @@ function AccountPage({
   isCreatingInbox,
   inboxError,
   onCreateInbox,
+  circlesMode,
+  onCirclesModeToggle,
 }) {
   const { address, isConnected } = useAccount();
   const { connectors, connect } = useConnect();
   const { disconnect } = useDisconnect();
   const [showConnectors, setShowConnectors] = useState(false);
   const [activeTab, setActiveTab] = useState("connect");
-  const [circlesMode, setCirclesMode] = useState(() => {
-    // Load circles mode from localStorage
-    const saved = localStorage.getItem("circles-mode");
-    return saved === "true";
-  });
+  const [circlesProfile, setCirclesProfile] = useState(null);
+  const [circlesLoading, setCirclesLoading] = useState(false);
+  const [circlesError, setCirclesError] = useState(null);
 
-  // Save circles mode to localStorage when it changes
-  const handleCirclesModeToggle = () => {
-    const newValue = !circlesMode;
-    setCirclesMode(newValue);
-    localStorage.setItem("circles-mode", String(newValue));
-  };
+  // Fetch Circles profile when Circles Mode is enabled
+  useEffect(() => {
+    const fetchCirclesProfile = async () => {
+      if (!circlesMode || !address) {
+        setCirclesProfile(null);
+        setCirclesError(null);
+        return;
+      }
+
+      setCirclesLoading(true);
+      setCirclesError(null);
+
+      try {
+        const response = await fetch("https://rpc.aboutcircles.com/", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "circles_getProfileByAddress",
+            params: [address],
+          }),
+        });
+
+        const data = await response.json();
+
+        if (data.result && Object.keys(data.result).length > 0) {
+          setCirclesProfile(data.result);
+        } else {
+          setCirclesProfile(null);
+        }
+      } catch (error) {
+        console.error("Error fetching Circles profile:", error);
+        setCirclesError("Failed to fetch Circles profile");
+      } finally {
+        setCirclesLoading(false);
+      }
+    };
+
+    fetchCirclesProfile();
+  }, [circlesMode, address]);
 
   // Format address for display
   const formatAddress = (addr) => {
@@ -74,7 +111,11 @@ function AccountPage({
                       <button
                         key={connector.id}
                         onClick={() => {
-                          console.log("Connecting to:", connector.name, connector);
+                          console.log(
+                            "Connecting to:",
+                            connector.name,
+                            connector,
+                          );
                           connect(
                             { connector },
                             {
@@ -85,7 +126,7 @@ function AccountPage({
                                 console.error("Connection error:", error);
                                 alert(`Connection failed: ${error.message}`);
                               },
-                            }
+                            },
                           );
                         }}
                         className="connector-button">
@@ -159,6 +200,48 @@ function AccountPage({
                     </div>
                   )}
 
+                  {circlesMode && (
+                    <div className="circles-status-box">
+                      <span className="circles-status-label">
+                        Circles Status
+                      </span>
+                      {circlesLoading ? (
+                        <span className="circles-loading">
+                          Loading Circles profile...
+                        </span>
+                      ) : circlesError ? (
+                        <span className="circles-error">{circlesError}</span>
+                      ) : circlesProfile ? (
+                        <div className="circles-profile">
+                          <div className="circles-profile-content">
+                            {circlesProfile.previewImageUrl && (
+                              <img
+                                src={circlesProfile.previewImageUrl}
+                                alt={circlesProfile.name}
+                                className="circles-avatar"
+                              />
+                            )}
+                            <div className="circles-info">
+                              <span className="circles-name">
+                                Name: {circlesProfile.name}
+                              </span>
+                              {circlesProfile.description && (
+                                <span className="circles-description">
+                                  {circlesProfile.description}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="circles-not-found">
+                          Your account is not registered on Circles. Go to
+                          app.gnosis.io
+                        </span>
+                      )}
+                    </div>
+                  )}
+
                   <button
                     className="disconnect-button"
                     onClick={() => disconnect()}>
@@ -185,7 +268,7 @@ function AccountPage({
                   <input
                     type="checkbox"
                     checked={circlesMode}
-                    onChange={handleCirclesModeToggle}
+                    onChange={onCirclesModeToggle}
                   />
                   <span className="toggle-slider"></span>
                 </label>

@@ -20,6 +20,18 @@ function App() {
   const [xmtpClient, setXmtpClient] = useState(null);
   const [isCreatingInbox, setIsCreatingInbox] = useState(false);
   const [inboxError, setInboxError] = useState(null);
+  const [circlesMode, setCirclesMode] = useState(() => {
+    // Load circles mode from localStorage
+    const saved = localStorage.getItem("circles-mode");
+    return saved === "true";
+  });
+
+  // Save circles mode to localStorage when it changes
+  const handleCirclesModeToggle = () => {
+    const newValue = !circlesMode;
+    setCirclesMode(newValue);
+    localStorage.setItem("circles-mode", String(newValue));
+  };
 
   // Use hooks for conversations management
   const {
@@ -255,6 +267,19 @@ function App() {
               </div>
             )}
           </div>
+          <div className="header-right">
+            <div className="header-toggle-container">
+              <span className="header-toggle-label">Circles Mode</span>
+              <label className="toggle-switch">
+                <input
+                  type="checkbox"
+                  checked={circlesMode}
+                  onChange={handleCirclesModeToggle}
+                />
+                <span className="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
         </div>
       </header>
 
@@ -289,6 +314,7 @@ function App() {
                 onNewConversation={() => setIsNewConversationModalOpen(true)}
                 isLoading={isLoadingConversations}
                 onRefresh={syncConversations}
+                circlesMode={circlesMode}
               />
               <MessageArea
                 conversation={selectedConversation}
@@ -302,6 +328,8 @@ function App() {
             isCreatingInbox={isCreatingInbox}
             inboxError={inboxError}
             onCreateInbox={handleCreateInbox}
+            circlesMode={circlesMode}
+            onCirclesModeToggle={handleCirclesModeToggle}
           />
         )}
       </div>

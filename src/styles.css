@@ -50,6 +50,29 @@ body {
   gap: 1rem;
 }
 
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.header-toggle-container {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  background: #f9f9f9;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+}
+
+.header-toggle-label {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #1a1a1a;
+  white-space: nowrap;
+}
+
 .app-header h1 {
   font-size: 1.5rem;
   font-weight: 600;
@@ -332,6 +355,15 @@ body {
   color: white;
   font-weight: 600;
   font-size: 0.9rem;
+  margin-right: 1rem;
+  flex-shrink: 0;
+}
+
+.conversation-avatar-image {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
   margin-right: 1rem;
   flex-shrink: 0;
 }
@@ -869,6 +901,82 @@ body {
   border-radius: 6px;
   font-size: 0.9rem;
   border: 1px solid #ffcdd2;
+}
+
+/* Circles Status Styles */
+.circles-status-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.5rem;
+  background: #f9f9f9;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+}
+
+.circles-status-label {
+  font-size: 0.85rem;
+  color: #666;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.circles-loading {
+  font-size: 0.9rem;
+  color: #666;
+  font-style: italic;
+}
+
+.circles-error {
+  font-size: 0.9rem;
+  color: #d32f2f;
+}
+
+.circles-not-found {
+  font-size: 0.9rem;
+  color: #999;
+  font-style: italic;
+}
+
+.circles-profile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.circles-profile-content {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.circles-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #4CAF50;
+  flex-shrink: 0;
+}
+
+.circles-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1;
+}
+
+.circles-name {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.circles-description {
+  font-size: 0.9rem;
+  color: #666;
+  line-height: 1.4;
 }
 
 /* Modal Styles */

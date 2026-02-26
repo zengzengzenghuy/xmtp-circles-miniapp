@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { useMetadata } from "../stores/inboxHooks";
 
 // Component to display conversation with metadata
@@ -6,8 +6,19 @@ function ConversationItem({
   conversation,
   selectedConversation,
   onSelectConversation,
+  circlesMode,
 }) {
   const metadata = useMetadata(conversation.id);
+  const [circlesProfile, setCirclesProfile] = useState(null);
+  const [circlesLoading, setCirclesLoading] = useState(false);
+
+  // Helper to get full peer address (not truncated)
+  const getFullPeerAddress = () => {
+    if (metadata.identifier || (metadata.name && metadata.name.startsWith('0x'))) {
+      return metadata.identifier || metadata.name;
+    }
+    return null;
+  };
 
   // Helper to get peer address from metadata
   const getPeerAddress = () => {
@@ -32,6 +43,54 @@ function ConversationItem({
   const peerAddress = getPeerAddress();
   const isGroup = conversation.metadata?.conversationType === "group";
 
+  // Fetch Circles profile when Circles Mode is enabled
+  useEffect(() => {
+    const fetchCirclesProfile = async () => {
+      if (!circlesMode) {
+        setCirclesProfile(null);
+        return;
+      }
+
+      const fullAddress = getFullPeerAddress();
+      if (!fullAddress) {
+        setCirclesProfile(null);
+        return;
+      }
+
+      setCirclesLoading(true);
+
+      try {
+        const response = await fetch("https://rpc.aboutcircles.com/", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "circles_getProfileByAddress",
+            params: [fullAddress],
+          }),
+        });
+
+        const data = await response.json();
+
+        if (data.result && Object.keys(data.result).length > 0) {
+          setCirclesProfile(data.result);
+        } else {
+          setCirclesProfile(null);
+        }
+      } catch (error) {
+        console.error("Error fetching Circles profile:", error);
+        setCirclesProfile(null);
+      } finally {
+        setCirclesLoading(false);
+      }
+    };
+
+    fetchCirclesProfile();
+  }, [circlesMode, metadata.identifier, metadata.name]);
+
   // Get avatar initials safely - for addresses, skip the "0x" prefix
   const getAvatarText = () => {
     if (peerAddress.startsWith('0x')) {
@@ -49,11 +108,23 @@ function ConversationItem({
         selectedConversation?.id === conversation.id ? "active" : ""
       }`}
       onClick={() => onSelectConversation(conversation)}>
-      <div className="conversation-avatar">{avatarText}</div>
+      {circlesProfile && circlesProfile.previewImageUrl ? (
+        <img
+          src={circlesProfile.previewImageUrl}
+          alt={circlesProfile.name}
+          className="conversation-avatar-image"
+        />
+      ) : (
+        <div className="conversation-avatar">{avatarText}</div>
+      )}
       <div className="conversation-details">
         <div className="conversation-header">
           <span className="conversation-address">
-            {isGroup ? `Group: ${peerAddress}` : peerAddress}
+            {circlesProfile && circlesProfile.name
+              ? circlesProfile.name
+              : isGroup
+                ? `Group: ${peerAddress}`
+                : peerAddress}
           </span>
           <span className="conversation-time">
             {new Date(
@@ -76,6 +147,7 @@ function ConversationList({
   onNewConversation,
   isLoading,
   onRefresh,
+  circlesMode,
 }) {
 
   return (
@@ -115,6 +187,7 @@ function ConversationList({
               conversation={conversation}
               selectedConversation={selectedConversation}
               onSelectConversation={onSelectConversation}
+              circlesMode={circlesMode}
             />
           ))
         )}
