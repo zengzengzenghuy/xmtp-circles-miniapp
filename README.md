@@ -207,9 +207,10 @@ XMTP Browser SDK uses IndexedDB to store:
 
 - [ ] Circles integration features
   - [ ] Transfer CRC with Notes
-  - [ ] Only allow conversation with human / avatar you trust
-  - [ ] Circles as identifier ID
-  - [ ] Search Circles profile
+  - [x] Only allow conversation with human and has registered on XMTP
+  - [ ] Only allow dm from avatar you trust
+  - [x] Circles as identifier ID
+  - [x] Search receiver with Circles address
 - [ ] XMTP Group chat support
 - [ ] Circles group chat support
 - [ ] Compatible with Circles MiniApp
