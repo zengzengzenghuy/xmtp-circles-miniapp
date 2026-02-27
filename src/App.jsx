@@ -31,9 +31,9 @@ function App() {
   const [isCreatingInbox, setIsCreatingInbox] = useState(false);
   const [inboxError, setInboxError] = useState(null);
   const [circlesMode, setCirclesMode] = useState(() => {
-    // Load circles mode from localStorage
+    // Load circles mode from localStorage, default to true if not set
     const saved = localStorage.getItem("circles-mode");
-    return saved === "true";
+    return saved === null ? true : saved === "true";
   });
 
   // Save circles mode to localStorage when it changes
