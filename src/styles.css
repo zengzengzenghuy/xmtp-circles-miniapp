@@ -903,8 +903,8 @@ body {
   border: 1px solid #ffcdd2;
 }
 
-/* Circles Status Styles */
-.circles-status-box {
+/* Circles Profile Styles */
+.circles-profile-box {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
@@ -914,7 +914,7 @@ body {
   border: 1px solid #e0e0e0;
 }
 
-.circles-status-label {
+.circles-profile-label {
   font-size: 0.85rem;
   color: #666;
   font-weight: 500;
@@ -1094,6 +1094,93 @@ body {
 .modal-create-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Search Input Container with Dropdown */
+.search-input-container {
+  position: relative;
+}
+
+.search-loading {
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.85rem;
+  color: #666;
+  font-style: italic;
+  pointer-events: none;
+}
+
+.search-results-dropdown {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  right: 0;
+  background: white;
+  border: 2px solid #4CAF50;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1001;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.search-results-dropdown::-webkit-scrollbar {
+  width: 6px;
+}
+
+.search-results-dropdown::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.search-results-dropdown::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 3px;
+}
+
+.search-results-dropdown::-webkit-scrollbar-thumb:hover {
+  background: #999;
+}
+
+.search-result-item {
+  padding: 1rem 1.25rem;
+  cursor: pointer;
+  transition: background 0.2s;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.search-result-item:last-child {
+  border-bottom: none;
+}
+
+.search-result-item:hover,
+.search-result-item.selected {
+  background: #f0f8ff;
+}
+
+.search-result-name {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin-bottom: 0.25rem;
+}
+
+.search-result-address {
+  font-size: 0.85rem;
+  color: #666;
+  font-family: monospace;
+  word-break: break-all;
+}
+
+.search-result-more {
+  padding: 0.75rem 1.25rem;
+  text-align: center;
+  font-size: 0.85rem;
+  color: #999;
+  font-style: italic;
+  background: #f9f9f9;
+  border-top: 1px solid #e0e0e0;
 }
 
 /* Settings Section */

@@ -18,7 +18,8 @@ function AccountPage({
 
   // Use prop values when provided (miniapp mode), fall back to wagmi
   const address = addressProp !== undefined ? addressProp : wagmiAddress;
-  const isConnected = isConnectedProp !== undefined ? isConnectedProp : wagmiConnected;
+  const isConnected =
+    isConnectedProp !== undefined ? isConnectedProp : wagmiConnected;
   const [showConnectors, setShowConnectors] = useState(false);
   const [activeTab, setActiveTab] = useState("connect");
   const [circlesProfile, setCirclesProfile] = useState(null);
@@ -114,7 +115,8 @@ function AccountPage({
                     <div className="connector-list">
                       {availableConnectors.length === 0 ? (
                         <p style={{ color: "#999", textAlign: "center" }}>
-                          No connectors available. Please check your configuration.
+                          No connectors available. Please check your
+                          configuration.
                         </p>
                       ) : (
                         availableConnectors.map((connector) => (
@@ -134,13 +136,17 @@ function AccountPage({
                                   },
                                   onError: (error) => {
                                     console.error("Connection error:", error);
-                                    alert(`Connection failed: ${error.message}`);
+                                    alert(
+                                      `Connection failed: ${error.message}`,
+                                    );
                                   },
                                 },
                               );
                             }}
                             className="connector-button">
-                            <span className="connector-name">{connector.name}</span>
+                            <span className="connector-name">
+                              {connector.name}
+                            </span>
                             <span className="connector-arrow">→</span>
                           </button>
                         ))
@@ -212,9 +218,9 @@ function AccountPage({
                   )}
 
                   {circlesMode && (
-                    <div className="circles-status-box">
-                      <span className="circles-status-label">
-                        Circles Status
+                    <div className="circles-profile-box">
+                      <span className="circles-profile-label">
+                        Circles Profile
                       </span>
                       {circlesLoading ? (
                         <span className="circles-loading">
@@ -254,7 +260,12 @@ function AccountPage({
                   )}
 
                   {isMiniapp ? (
-                    <p style={{ color: "#888", fontSize: "0.85em", margin: "8px 0 0" }}>
+                    <p
+                      style={{
+                        color: "#888",
+                        fontSize: "0.85em",
+                        margin: "8px 0 0",
+                      }}>
                       Connected via Circles host wallet
                     </p>
                   ) : (

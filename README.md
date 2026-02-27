@@ -206,13 +206,14 @@ XMTP Browser SDK uses IndexedDB to store:
 
 ## Roadmap
 
+- [ ] Support xmtp history sync
 - [ ] Circles integration features
   - [ ] Transfer CRC with Notes
   - [x] Only allow conversation with human and has registered on XMTP
   - [ ] Only allow dm from avatar you trust
   - [x] Circles as identifier ID
   - [x] Search receiver with Circles address
-  - [ ] Support search using Circles username
+  - [x] Support search using Circles usernameCircles Status
 - [ ] XMTP Group chat support
 - [ ] Circles group chat support
 - [ ] Compatible with Circles MiniApp
