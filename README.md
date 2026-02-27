@@ -202,6 +202,7 @@ XMTP Browser SDK uses IndexedDB to store:
 - **Connection Timeout**: 60-second timeout for XMTP client creation
 - **System Messages**: Automatically filtered but visible in network logs
 - **First Message Delay**: Initial message in a new conversation may take a few seconds
+- **Using Rabby Wallet**: Go to **Settings > Connect Rabby by Disguising as MetaMask** and try to refresh and reconnect again.
 
 ## Roadmap
 
@@ -211,6 +212,7 @@ XMTP Browser SDK uses IndexedDB to store:
   - [ ] Only allow dm from avatar you trust
   - [x] Circles as identifier ID
   - [x] Search receiver with Circles address
+  - [ ] Support search using Circles username
 - [ ] XMTP Group chat support
 - [ ] Circles group chat support
 - [ ] Compatible with Circles MiniApp
