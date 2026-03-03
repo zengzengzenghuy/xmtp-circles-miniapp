@@ -8,6 +8,7 @@ import AccountPage from "./components/AccountPage";
 import ChattingRoom from "./components/ChattingRoom";
 import Arcade from "./components/Arcade";
 import NewConversationModal from "./components/NewConversationModal";
+import { parseInviteFromSearch } from "./components/arcade/helpers/invite";
 import { createEOASigner, createSCWSigner } from "./helpers/createSigner";
 import {
   isMiniappMode,
@@ -19,6 +20,10 @@ import { useActions } from "./stores/inboxHooks";
 
 function App() {
   const { address, isConnected, connector, chainId } = useAccount();
+  const initialArcadeInviteResult = React.useMemo(
+    () => parseInviteFromSearch(window.location.search),
+    [],
+  );
   const { signMessageAsync } = useSignMessage();
 
   // Miniapp mode: running inside newCore iframe host
@@ -26,7 +31,9 @@ function App() {
   const [miniappAddress, setMiniappAddress] = useState(null);
 
   const [selectedConversation, setSelectedConversation] = useState(null);
-  const [activeTab, setActiveTab] = useState("chat");
+  const [activeTab, setActiveTab] = useState(() =>
+    initialArcadeInviteResult.invite ? "arcade" : "chat",
+  );
   const [isNewConversationModalOpen, setIsNewConversationModalOpen] =
     useState(false);
   const [xmtpClient, setXmtpClient] = useState(null);
@@ -48,6 +55,15 @@ function App() {
   // Derived effective wallet state (miniapp or wagmi)
   const effectiveAddress = isMiniapp ? miniappAddress : address;
   const effectiveConnected = isMiniapp ? !!miniappAddress : isConnected;
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("arcadeInvite")) {
+      return;
+    }
+    url.searchParams.delete("arcadeInvite");
+    window.history.replaceState({}, "", url);
+  }, []);
 
   // When running inside the newCore iframe host, subscribe to host wallet events
   useEffect(() => {
@@ -377,7 +393,13 @@ function App() {
         ) : activeTab === "chatting-room" ? (
           <ChattingRoom />
         ) : activeTab === "arcade" ? (
-          <Arcade />
+          <Arcade
+            address={effectiveAddress}
+            connected={effectiveConnected}
+            xmtpClient={xmtpClient}
+            onOpenAccount={() => setActiveTab("account")}
+            initialInvite={initialArcadeInviteResult.invite}
+          />
         ) : (
           <AccountPage
             xmtpClient={xmtpClient}
