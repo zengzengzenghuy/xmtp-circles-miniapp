@@ -27,6 +27,14 @@ function envelopeKey(message) {
   ].join(":");
 }
 
+function isOwnEnvelope(message, address) {
+  return (
+    message?.from &&
+    address &&
+    String(message.from).toLowerCase() === String(address).toLowerCase()
+  );
+}
+
 async function resolveInboxId(client, address) {
   const inboxId = await client.fetchInboxIdByIdentifier({
     identifier: address,
@@ -126,13 +134,14 @@ export function useArcadeTransport({ xmtpClient, address }) {
       return messages
         .map((message) => parseEnvelope(decodeTextContent(message.content)))
         .filter(Boolean)
+        .filter((message) => !isOwnEnvelope(message, address))
         .filter(
           (message) =>
             String(message.sessionId) === String(sessionId) &&
             String(message.gameKey) === String(gameKey),
         );
     },
-    [parseEnvelope],
+    [address, parseEnvelope],
   );
 
   const startSessionStream = useCallback(
@@ -152,6 +161,9 @@ export function useArcadeTransport({ xmtpClient, address }) {
           if (!parsed) {
             return;
           }
+          if (isOwnEnvelope(parsed, address)) {
+            return;
+          }
           if (
             String(parsed.sessionId) !== String(sessionId) ||
             String(parsed.gameKey) !== String(gameKey)
@@ -169,7 +181,7 @@ export function useArcadeTransport({ xmtpClient, address }) {
         }
       };
     },
-    [parseEnvelope, xmtpClient],
+    [address, parseEnvelope, xmtpClient],
   );
 
   return useMemo(

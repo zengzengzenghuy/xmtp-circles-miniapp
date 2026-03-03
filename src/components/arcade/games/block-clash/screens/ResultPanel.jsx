@@ -8,6 +8,7 @@ export default function BlockClashResultPanel({ gameState, revealState }) {
         board={gameState.occupiedBoard}
         title="Final board"
         subtitle="The full placement history is replayed on the shared board."
+        className="block-clash-board"
       />
 
       <div className="panel">

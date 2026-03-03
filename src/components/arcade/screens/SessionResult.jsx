@@ -7,6 +7,7 @@ export default function SessionResult({
   secretState,
   winner,
   verification,
+  info,
   onPlayAgain,
   onReset,
 }) {
@@ -30,6 +31,8 @@ export default function SessionResult({
           <code>{winner || "Unknown"}</code>
         </div>
       </section>
+
+      {info ? <div className="banner info">{info}</div> : null}
 
       {verification.reason ? (
         <div className={`banner ${verification.contested ? "error" : "info"}`}>

@@ -8,6 +8,8 @@ export default function PlaySession({
   isMyTurn,
   info,
   onAction,
+  onResign,
+  isResigning = false,
 }) {
   if (!selectedGame) {
     return null;
@@ -18,6 +20,16 @@ export default function PlaySession({
   return (
     <div className="arcade-stage">
       {info ? <div className="banner info">{info}</div> : null}
+      <div className="play-session-actions">
+        <button
+          type="button"
+          className="ghost-btn"
+          onClick={onResign}
+          disabled={isResigning}
+        >
+          {isResigning ? "Resigning..." : "Resign session"}
+        </button>
+      </div>
       <PlayScreen
         gameState={gameState}
         role={role}

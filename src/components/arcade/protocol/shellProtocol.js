@@ -25,6 +25,42 @@ export function makeReadyMessage(gameDef, sessionId, from) {
   });
 }
 
+export function buildResignResult(gameDef, gameState, context) {
+  const { address, opponentAddress, sessionId, secretState, mySeq } = context;
+
+  return {
+    gameState: {
+      ...gameState,
+      winner: opponentAddress,
+      reveal: {
+        ...(gameState?.reveal || {}),
+        mine: secretState,
+      },
+    },
+    winner: opponentAddress,
+    info: "You resigned the session.",
+    outgoingMessages: [
+      makeEnvelope({
+        gameKey: gameDef.key,
+        sessionId,
+        from: address,
+        type: gameOverType(gameDef.key),
+        seq: mySeq,
+        payload: { winner: opponentAddress, reason: "resign" },
+      }),
+      makeEnvelope({
+        gameKey: gameDef.key,
+        sessionId,
+        from: address,
+        type: revealType(gameDef.key),
+        seq: mySeq,
+        payload: gameDef.buildRevealPayload(secretState),
+      }),
+    ],
+    seqDelta: { mySeq: mySeq + 1 },
+  };
+}
+
 export function handleIncomingMessage(gameDef, message, context) {
   const {
     gameState,
@@ -45,6 +81,7 @@ export function handleIncomingMessage(gameDef, message, context) {
 
   if (message.type === gameOverType(gameDef.key)) {
     const winner = message.payload.winner;
+    const didOpponentResign = message.payload.reason === "resign";
     const outgoingMessages = [];
 
     if (safeLower(winner) === safeLower(address)) {
@@ -69,6 +106,10 @@ export function handleIncomingMessage(gameDef, message, context) {
         gameState: { ...gameState, winner, reveal: { ...gameState.reveal, opponent: message.payload } },
         winner,
         verification,
+        info:
+          didOpponentResign && safeLower(winner) === safeLower(address)
+            ? "Opponent resigned the session."
+            : undefined,
         outgoingMessages: outgoingMessages.length > 0 ? outgoingMessages : undefined,
         seqDelta: outgoingMessages.length > 0 ? { mySeq: mySeq + 1 } : undefined,
       };
@@ -77,6 +118,10 @@ export function handleIncomingMessage(gameDef, message, context) {
     return {
       gameState: { ...gameState, winner },
       winner,
+      info:
+        didOpponentResign && safeLower(winner) === safeLower(address)
+          ? "Opponent resigned the session."
+          : undefined,
       outgoingMessages: outgoingMessages.length > 0 ? outgoingMessages : undefined,
       seqDelta: outgoingMessages.length > 0 ? { mySeq: mySeq + 1 } : undefined,
     };
@@ -158,6 +203,7 @@ export function handleIncomingMessage(gameDef, message, context) {
 
   if (gameDef.moveResultType && message.type === gameDef.moveResultType) {
     const result = gameDef.handleMoveResult(gameState, message.payload, context);
+    const nextTurn = role === "creator" ? "joiner" : "creator";
 
     const outgoingMessages = [];
     if (result.winner) {
@@ -185,7 +231,7 @@ export function handleIncomingMessage(gameDef, message, context) {
       gameState: result.gameState,
       winner: result.winner || '',
       info: result.info || '',
-      turnDelta: { turn: role },
+      turnDelta: { turn: result.winner ? turn : nextTurn },
       outgoingMessages: outgoingMessages.length > 0 ? outgoingMessages : undefined,
     };
   }

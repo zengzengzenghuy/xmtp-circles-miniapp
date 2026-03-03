@@ -1,31 +1,5 @@
 import React from 'react';
-import { normalizeCells } from '../helpers/pieces.js';
-
-function PieceShape({ piece }) {
-  const cells = normalizeCells(piece.cells);
-  const width = Math.max(...cells.map(([x]) => x)) + 1;
-  const height = Math.max(...cells.map(([, y]) => y)) + 1;
-  const filled = new Set(cells.map(([x, y]) => `${x}:${y}`));
-
-  return (
-    <div
-      className="piece-card-shape-grid"
-      style={{ gridTemplateColumns: `repeat(${width}, 1fr)` }}
-      aria-hidden="true"
-    >
-      {Array.from({ length: width * height }, (_, index) => {
-        const x = index % width;
-        const y = Math.floor(index / width);
-        return (
-          <span
-            key={`${piece.id}-${x}-${y}`}
-            className={`piece-card-shape-cell ${filled.has(`${x}:${y}`) ? 'piece-card-shape-cell-filled' : ''}`}
-          />
-        );
-      })}
-    </div>
-  );
-}
+import PieceShape from './PieceShape.jsx';
 
 export default function PiecePicker({ pieces, selectedPieceIds, onTogglePiece }) {
   return (

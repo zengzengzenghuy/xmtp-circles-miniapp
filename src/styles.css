@@ -1622,6 +1622,12 @@ body {
   gap: 0.75rem;
 }
 
+.arcade-page .play-session-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.85rem;
+}
+
 .arcade-page .board-card {
   display: flex;
   flex-direction: column;
@@ -1697,6 +1703,20 @@ body {
   gap: 0.75rem;
 }
 
+.arcade-page .block-clash-play-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 17rem;
+  gap: 1rem;
+  align-items: start;
+}
+
+.arcade-page .block-clash-side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  align-self: start;
+}
+
 .arcade-page .battleship-setup-board-wrap {
   display: flex;
   justify-content: center;
@@ -1708,8 +1728,17 @@ body {
   margin-inline: auto;
 }
 
+.arcade-page .block-clash-board {
+  width: min(100%, 34rem);
+  margin-inline: auto;
+}
+
 .arcade-page .battleship-setup-board .board-grid,
 .arcade-page .battleship-board-panel .board-grid {
+  gap: 0.18rem;
+}
+
+.arcade-page .block-clash-board .clash-board-grid {
   gap: 0.18rem;
 }
 
@@ -1787,6 +1816,18 @@ body {
   font-weight: 600;
 }
 
+.arcade-page .ship-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  padding: 0.55rem 0.85rem;
+  border-radius: 999px;
+  background: #edf6f2;
+  border: 1px solid var(--arcade-border);
+  font-weight: 600;
+}
+
 .arcade-page .ship-pill.active,
 .arcade-page .piece-chip.active {
   background: rgba(17, 124, 108, 0.12);
@@ -1799,8 +1840,73 @@ body {
   color: var(--arcade-brand-strong);
 }
 
+.arcade-page .piece-tray {
+  align-items: stretch;
+}
+
+.arcade-page .piece-tray-vertical {
+  flex-direction: column;
+  overflow-x: visible;
+}
+
+.arcade-page .piece-chip {
+  flex-direction: column;
+  gap: 0.55rem;
+  min-width: 8rem;
+  min-height: 6.8rem;
+  white-space: normal;
+  border-radius: 16px;
+  background: #f7fbf9;
+  text-align: center;
+}
+
+.arcade-page .piece-chip-vertical {
+  width: 100%;
+  min-width: 0;
+}
+
+.arcade-page .piece-chip-compact {
+  min-height: 6.1rem;
+  padding: 0.7rem;
+}
+
 .arcade-page .piece-chip-disabled {
   opacity: 0.45;
+}
+
+.arcade-page .piece-chip-shape {
+  min-height: 2.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.arcade-page .piece-chip-shape-grid {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.arcade-page .piece-chip-shape-cell {
+  width: 0.82rem;
+  height: 0.82rem;
+  border-radius: 4px;
+  background: #e4eee9;
+}
+
+.arcade-page .piece-chip-shape-cell-filled {
+  background: var(--arcade-brand);
+}
+
+.arcade-page .piece-chip-meta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.arcade-page .piece-chip-meta strong {
+  font-size: 0.88rem;
 }
 
 .arcade-page .invite-link-code {
@@ -2022,6 +2128,21 @@ body {
     grid-template-columns: 1fr;
   }
 
+  .arcade-page .block-clash-play-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .arcade-page .block-clash-side-panel {
+    width: min(100%, 34rem);
+    margin-inline: auto;
+  }
+
+  .arcade-page .piece-tray-vertical {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: visible;
+  }
+
   .arcade-page .status-bar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -2039,7 +2160,8 @@ body {
   }
 
   .arcade-page .battleship-setup-board,
-  .arcade-page .battleship-board-panel .board-card {
+  .arcade-page .battleship-board-panel .board-card,
+  .arcade-page .block-clash-board {
     width: min(100%, 28rem);
   }
 
@@ -2060,6 +2182,14 @@ body {
 
   .arcade-page .ship-progress-inline {
     justify-content: flex-start;
+  }
+
+  .arcade-page .play-session-actions {
+    justify-content: stretch;
+  }
+
+  .arcade-page .play-session-actions .ghost-btn {
+    width: 100%;
   }
 }
 
@@ -2094,7 +2224,8 @@ body {
   }
 
   .arcade-page .battleship-setup-board,
-  .arcade-page .battleship-board-panel .board-card {
+  .arcade-page .battleship-board-panel .board-card,
+  .arcade-page .block-clash-board {
     width: min(100%, 24rem);
   }
 
@@ -2121,9 +2252,23 @@ body {
     flex-direction: column;
   }
 
+  .arcade-page .block-clash-side-panel {
+    width: min(100%, 24rem);
+  }
+
   .arcade-page .piece-card {
     min-height: 7.6rem;
     padding: 0.85rem 0.7rem;
+  }
+
+  .arcade-page .piece-chip {
+    min-height: 5.6rem;
+    padding: 0.7rem 0.65rem;
+  }
+
+  .arcade-page .piece-chip-shape-cell {
+    width: 0.74rem;
+    height: 0.74rem;
   }
 
   .arcade-page .piece-card-shape-cell {

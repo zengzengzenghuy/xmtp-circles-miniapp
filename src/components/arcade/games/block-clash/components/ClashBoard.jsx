@@ -8,9 +8,10 @@ export default function ClashBoard({
   disabled = false,
   highlighted = false,
   placementActive = false,
+  className = "",
 }) {
   return (
-    <section className={`board-card ${highlighted ? 'board-card-highlighted' : ''} ${placementActive ? 'board-card-placement-active' : ''}`.trim()}>
+    <section className={`board-card ${highlighted ? 'board-card-highlighted' : ''} ${placementActive ? 'board-card-placement-active' : ''} ${className}`.trim()}>
       {title ? <h3>{title}</h3> : null}
       {subtitle ? <p className="board-subtitle">{subtitle}</p> : null}
       <div className="board-grid clash-board-grid" role="grid">

@@ -3,6 +3,7 @@ import { GAMES, getGameDefinition } from "./arcade/gameRegistry.js";
 import { buildGenericCommitment } from "./arcade/protocol/commitment.js";
 import {
   applyLocalMove,
+  buildResignResult,
   handleIncomingMessage,
   makeJoinMessage,
   makeReadyMessage,
@@ -35,6 +36,10 @@ function buildCurrentInviteUrl(payload) {
   return buildInviteLink(window.location.href, payload);
 }
 
+function safeLower(value) {
+  return String(value || "").toLowerCase();
+}
+
 export default function Arcade({
   address,
   connected,
@@ -47,6 +52,7 @@ export default function Arcade({
   const [inviteLink, setInviteLink] = useState("");
   const [pendingInvite, setPendingInvite] = useState(initialInvite);
   const [conflictingInvite, setConflictingInvite] = useState(null);
+  const [isResigning, setIsResigning] = useState(false);
   const stateRef = useRef(state);
   const streamCleanupRef = useRef(null);
 
@@ -193,6 +199,10 @@ export default function Arcade({
         return;
       }
 
+      if (safeLower(message.from) === safeLower(localState.address)) {
+        return;
+      }
+
       if (message.type === "SESSION_JOIN") {
         if (
           localState.session.role !== "creator" ||
@@ -224,7 +234,8 @@ export default function Arcade({
       if (message.type === "SESSION_READY") {
         if (
           localState.session.role !== "joiner" ||
-          localState.session.status !== SESSION_STATUS.WAITING_FOR_READY
+          localState.session.status !== SESSION_STATUS.WAITING_FOR_READY ||
+          safeLower(message.from) !== safeLower(localState.session.creatorAddress)
         ) {
           return;
         }
@@ -241,13 +252,19 @@ export default function Arcade({
         return;
       }
 
+      const peerAddress =
+        localState.session.role === "creator"
+          ? localState.session.joinerAddress
+          : localState.session.creatorAddress;
+
+      if (peerAddress && safeLower(message.from) !== safeLower(peerAddress)) {
+        return;
+      }
+
       const result = handleIncomingMessage(game, message, {
         address: localState.address,
         role: localState.session.role,
-        opponentAddress:
-          localState.session.role === "creator"
-            ? localState.session.joinerAddress
-            : localState.session.creatorAddress,
+        opponentAddress: peerAddress,
         sessionId: localState.session.sessionId,
         session: localState.session,
         gameState: localState.gameState,
@@ -567,6 +584,62 @@ export default function Arcade({
     ],
   );
 
+  const handleResignSession = useCallback(async () => {
+    if (
+      isResigning ||
+      state.phase !== PHASE.PLAYING ||
+      !selectedGame ||
+      !state.gameState
+    ) {
+      return;
+    }
+
+    const opponentAddress =
+      state.session.role === "creator"
+        ? state.session.joinerAddress
+        : state.session.creatorAddress;
+
+    if (!opponentAddress || !state.secretState) {
+      actions.setError("Session is not ready to resign.");
+      return;
+    }
+
+    setIsResigning(true);
+    actions.setError("");
+
+    try {
+      const result = buildResignResult(selectedGame, state.gameState, {
+        address: state.address,
+        opponentAddress,
+        sessionId: state.session.sessionId,
+        secretState: state.secretState,
+        mySeq: state.session.mySeq,
+      });
+
+      await transport.sendMany(result.outgoingMessages || []);
+      applyProtocolResult(result);
+    } catch (error) {
+      actions.setError(error.message || "Failed to resign the session");
+    } finally {
+      setIsResigning(false);
+    }
+  }, [
+    actions,
+    applyProtocolResult,
+    isResigning,
+    selectedGame,
+    state.address,
+    state.gameState,
+    state.phase,
+    state.secretState,
+    state.session.creatorAddress,
+    state.session.joinerAddress,
+    state.session.mySeq,
+    state.session.role,
+    state.session.sessionId,
+    transport,
+  ]);
+
   const handlePlayAgain = useCallback(() => {
     if (!selectedGame) {
       actions.resetSession();
@@ -667,6 +740,8 @@ export default function Arcade({
           isMyTurn={state.session.turn === state.session.role}
           info={state.info}
           onAction={handlePlayAction}
+          onResign={handleResignSession}
+          isResigning={isResigning}
         />
       );
     } else if (state.phase === PHASE.RESULT) {
@@ -678,6 +753,7 @@ export default function Arcade({
           secretState={state.secretState}
           winner={state.session.winner}
           verification={state.verification}
+          info={state.info}
           onPlayAgain={handlePlayAgain}
           onReset={actions.resetSession}
         />

@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import ClashBoard from '../components/ClashBoard.jsx';
 import PiecePreview from '../components/PiecePreview.jsx';
 import PieceTray from '../components/PieceTray.jsx';
 import CollapsiblePanel from "../../../components/CollapsiblePanel.jsx";
 import { getRemainingPieceIds } from '../helpers/board.js';
+import { getPieceById } from '../helpers/pieces.js';
 
 export default function BlockClashPlayScreen({
   gameState,
@@ -18,15 +19,8 @@ export default function BlockClashPlayScreen({
     role
   );
   const opponentRemainingCount = gameState.opponentSelectedPieceIdsRevealed?.length || 0;
-  const [controlsOpen, setControlsOpen] = useState(Boolean(gameState.selectedPieceId));
-
-  useEffect(() => {
-    if (gameState.selectedPieceId) {
-      setControlsOpen(true);
-    }
-  }, [gameState.selectedPieceId]);
-
-  const selectedPieceLabel = gameState.selectedPieceId ? gameState.selectedPieceId.replace(/_/g, ' ') : 'No piece selected';
+  const selectedPiece = getPieceById(gameState.selectedPieceId);
+  const selectedPieceLabel = selectedPiece?.label || 'No piece selected';
 
   return (
     <div className="screen">
@@ -45,25 +39,19 @@ export default function BlockClashPlayScreen({
         </div>
       </div>
 
-      <ClashBoard
-        board={gameState.occupiedBoard}
-        title="Shared board"
-        subtitle={isMyTurn ? 'Tap a cell to place the selected piece.' : 'Waiting for the opponent move.'}
-        onCellClick={isMyTurn ? (x, y) => onAction({ type: 'PLACE_SELECTED_PIECE', x, y }) : undefined}
-        disabled={!isMyTurn}
-        highlighted
-        placementActive={Boolean(gameState.selectedPieceId)}
-      />
+      <div className="block-clash-play-layout">
+        <ClashBoard
+          board={gameState.occupiedBoard}
+          title="Shared board"
+          subtitle={isMyTurn ? 'Tap a cell to place the selected piece.' : 'Waiting for the opponent move.'}
+          onCellClick={isMyTurn ? (x, y) => onAction({ type: 'PLACE_SELECTED_PIECE', x, y }) : undefined}
+          disabled={!isMyTurn}
+          highlighted
+          placementActive={Boolean(gameState.selectedPieceId)}
+          className="block-clash-board"
+        />
 
-      <CollapsiblePanel
-        title="Controls"
-        summary={gameState.selectedPieceId ? `${selectedPieceLabel} selected` : `${myRemainingPieceIds.length} pieces ready`}
-        compact
-        open={controlsOpen}
-        onToggle={setControlsOpen}
-        className="controls-panel"
-      >
-        <div className="controls-panel-content">
+        <aside className="panel block-clash-side-panel">
           <PiecePreview
             pieceId={gameState.selectedPieceId}
             rotation={gameState.selectedRotation}
@@ -80,10 +68,11 @@ export default function BlockClashPlayScreen({
             selectedPieceId={gameState.selectedPieceId}
             disabledPieceIds={[]}
             onSelectPiece={(pieceId) => onAction({ type: 'SELECT_PIECE', pieceId })}
+            layout="vertical"
             compact
           />
-        </div>
-      </CollapsiblePanel>
+        </aside>
+      </div>
 
       <CollapsiblePanel title="Tips" summary="3 quick rules" compact className="tips-panel">
         <ul className="check-list muted">
