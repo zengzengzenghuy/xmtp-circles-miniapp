@@ -1,5 +1,5 @@
-export const BLOCK_CLASH_BOARD_SIZE = 8;
-export const MAX_LOADOUT_SIZE = 6;
+export const BLOCK_CLASH_BOARD_SIZE = 7;
+export const MAX_LOADOUT_SIZE = 8;
 
 export const PIECE_CATALOG = [
   { id: 'domino', label: 'Domino', cells: [[0, 0], [1, 0]] },
@@ -8,8 +8,10 @@ export const PIECE_CATALOG = [
   { id: 'square_o', label: 'O', cells: [[0, 0], [1, 0], [0, 1], [1, 1]] },
   { id: 'tet_i', label: 'I4', cells: [[0, 0], [1, 0], [2, 0], [3, 0]] },
   { id: 'tet_l', label: 'L4', cells: [[0, 0], [0, 1], [0, 2], [1, 2]] },
+  { id: 'tet_j', label: 'J4', cells: [[1, 0], [1, 1], [1, 2], [0, 2]] },
   { id: 'tet_t', label: 'T', cells: [[0, 0], [1, 0], [2, 0], [1, 1]] },
   { id: 'tet_s', label: 'S', cells: [[1, 0], [2, 0], [0, 1], [1, 1]] },
+  { id: 'tet_z', label: 'Z', cells: [[0, 0], [1, 0], [1, 1], [2, 1]] },
 ];
 
 export const PIECE_INDEX = Object.fromEntries(PIECE_CATALOG.map((piece, index) => [piece.id, index]));
@@ -44,4 +46,3 @@ export function getRotatedPieceCells(pieceId, rotation = 0) {
   }
   return rotateCells(piece.cells, rotation);
 }
-

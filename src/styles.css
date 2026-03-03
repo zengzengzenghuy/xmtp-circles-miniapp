@@ -1408,6 +1408,11 @@ body {
   color: var(--arcade-text);
 }
 
+.arcade-shell-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .arcade-shell .screen,
 .arcade-shell .arcade-stage {
   display: flex;
@@ -1646,7 +1651,7 @@ body {
 }
 
 .arcade-page .clash-board-grid {
-  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
 }
 
 .arcade-page .cell {
@@ -1705,7 +1710,7 @@ body {
 
 .arcade-page .block-clash-play-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 17rem;
+  grid-template-columns: minmax(0, 1fr) 15.5rem;
   gap: 1rem;
   align-items: start;
 }
@@ -1845,8 +1850,10 @@ body {
 }
 
 .arcade-page .piece-tray-vertical {
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   overflow-x: visible;
+  gap: 0.55rem;
 }
 
 .arcade-page .piece-chip {
@@ -1863,11 +1870,13 @@ body {
 .arcade-page .piece-chip-vertical {
   width: 100%;
   min-width: 0;
+  min-height: 5.3rem;
+  padding: 0.65rem 0.55rem;
 }
 
 .arcade-page .piece-chip-compact {
-  min-height: 6.1rem;
-  padding: 0.7rem;
+  min-height: 5.3rem;
+  padding: 0.65rem 0.55rem;
 }
 
 .arcade-page .piece-chip-disabled {
@@ -1875,7 +1884,7 @@ body {
 }
 
 .arcade-page .piece-chip-shape {
-  min-height: 2.75rem;
+  min-height: 2.2rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1888,8 +1897,8 @@ body {
 }
 
 .arcade-page .piece-chip-shape-cell {
-  width: 0.82rem;
-  height: 0.82rem;
+  width: 0.72rem;
+  height: 0.72rem;
   border-radius: 4px;
   background: #e4eee9;
 }
@@ -1906,7 +1915,7 @@ body {
 }
 
 .arcade-page .piece-chip-meta strong {
-  font-size: 0.88rem;
+  font-size: 0.8rem;
 }
 
 .arcade-page .invite-link-code {
@@ -2138,7 +2147,6 @@ body {
   }
 
   .arcade-page .piece-tray-vertical {
-    display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     overflow: visible;
   }
@@ -2214,6 +2222,10 @@ body {
     border-radius: 16px;
   }
 
+  .arcade-shell-actions .ghost-btn {
+    width: 100%;
+  }
+
   .arcade-page .board-grid {
     gap: 0.18rem;
   }
@@ -2262,13 +2274,13 @@ body {
   }
 
   .arcade-page .piece-chip {
-    min-height: 5.6rem;
-    padding: 0.7rem 0.65rem;
+    min-height: 5rem;
+    padding: 0.65rem 0.55rem;
   }
 
   .arcade-page .piece-chip-shape-cell {
-    width: 0.74rem;
-    height: 0.74rem;
+    width: 0.68rem;
+    height: 0.68rem;
   }
 
   .arcade-page .piece-card-shape-cell {

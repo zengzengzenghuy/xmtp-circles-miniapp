@@ -85,3 +85,29 @@ export function clearActiveSessionRef(address) {
   if (!address) return;
   localStorage.removeItem(`${ACTIVE_PREFIX}${String(address).toLowerCase()}`);
 }
+
+export function clearAllArcadeStateForAddress(address) {
+  if (!address) return;
+
+  const normalizedAddress = String(address).toLowerCase();
+  const prefixes = [
+    `${STATE_PREFIX}${normalizedAddress}/`,
+    `${SECRET_PREFIX}${normalizedAddress}/`,
+    `${ACTIVE_PREFIX}${normalizedAddress}`,
+  ];
+
+  const keysToRemove = [];
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const currentKey = localStorage.key(index);
+    if (!currentKey) {
+      continue;
+    }
+    if (prefixes.some((prefix) => currentKey.startsWith(prefix))) {
+      keysToRemove.push(currentKey);
+    }
+  }
+
+  keysToRemove.forEach((currentKey) => {
+    localStorage.removeItem(currentKey);
+  });
+}

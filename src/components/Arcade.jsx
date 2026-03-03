@@ -4,6 +4,7 @@ import { buildGenericCommitment } from "./arcade/protocol/commitment.js";
 import {
   applyLocalMove,
   buildResignResult,
+  checkAutoLoss,
   handleIncomingMessage,
   makeJoinMessage,
   makeReadyMessage,
@@ -40,6 +41,11 @@ function safeLower(value) {
   return String(value || "").toLowerCase();
 }
 
+function formatSummaryLabel(value) {
+  const normalized = String(value || "").replaceAll("_", " ").toLowerCase();
+  return normalized ? normalized.charAt(0).toUpperCase() + normalized.slice(1) : "";
+}
+
 export default function Arcade({
   address,
   connected,
@@ -61,6 +67,18 @@ export default function Arcade({
     () => getGameDefinition(state.selectedGameKey || pendingInvite?.gameKey),
     [pendingInvite?.gameKey, state.selectedGameKey],
   );
+  const recoverySummary = useMemo(() => {
+    if (!state.recovery.available || !state.recovery.snapshot) {
+      return null;
+    }
+
+    const recoveryGame = getGameDefinition(state.recovery.snapshot.selectedGameKey);
+    return {
+      gameLabel: recoveryGame?.label || "Arcade session",
+      phaseLabel: formatSummaryLabel(state.recovery.snapshot.phase),
+      statusLabel: formatSummaryLabel(state.recovery.snapshot.session?.status),
+    };
+  }, [state.recovery.available, state.recovery.snapshot]);
 
   useEffect(() => {
     stateRef.current = state;
@@ -112,12 +130,22 @@ export default function Arcade({
       return;
     }
 
+    if (state.recovery.available) {
+      setConflictingInvite(pendingInvite);
+      return;
+    }
+
     if (
       state.phase !== PHASE.HOME &&
       state.session.sessionId &&
       state.session.sessionId !== pendingInvite.sessionId
     ) {
       setConflictingInvite(pendingInvite);
+      return;
+    }
+
+    if (state.phase !== PHASE.HOME) {
+      setPendingInvite(null);
       return;
     }
 
@@ -130,6 +158,7 @@ export default function Arcade({
     pendingInvite,
     state.hydrated,
     state.phase,
+    state.recovery.available,
     state.session.sessionId,
   ]);
 
@@ -277,6 +306,23 @@ export default function Arcade({
       applyProtocolResult(result);
       if (result.outgoingMessages?.length) {
         await transport.sendMany(result.outgoingMessages);
+      }
+
+      if (!result.winner && result.gameState) {
+        const autoLoss = checkAutoLoss(game, result.gameState, {
+          address: localState.address,
+          role: localState.session.role,
+          opponentAddress: peerAddress,
+          sessionId: localState.session.sessionId,
+          secretState: localState.secretState,
+          mySeq: localState.session.mySeq,
+        });
+        if (autoLoss.lost) {
+          applyProtocolResult(autoLoss);
+          if (autoLoss.outgoingMessages?.length) {
+            await transport.sendMany(autoLoss.outgoingMessages);
+          }
+        }
       }
     },
     [actions, applyProtocolResult, transport],
@@ -640,6 +686,33 @@ export default function Arcade({
     transport,
   ]);
 
+  const handleResetArcade = useCallback(async () => {
+    await clearStream();
+    transport.resetSessionCache();
+    setPendingInvite(null);
+    setConflictingInvite(null);
+    setInviteLink("");
+    setIsResigning(false);
+    actions.resetSession();
+  }, [actions, clearStream, transport]);
+
+  const handleResumeRecovery = useCallback(() => {
+    setPendingInvite(null);
+    setConflictingInvite(null);
+    actions.resumeRecovery();
+  }, [actions]);
+
+  const handleDiscardAndOpenInvite = useCallback(async () => {
+    const inviteToOpen = conflictingInvite;
+    await clearStream();
+    transport.resetSessionCache();
+    setConflictingInvite(null);
+    setInviteLink("");
+    setIsResigning(false);
+    actions.resetSession();
+    setPendingInvite(inviteToOpen);
+  }, [actions, clearStream, conflictingInvite, transport]);
+
   const handlePlayAgain = useCallback(() => {
     if (!selectedGame) {
       actions.resetSession();
@@ -652,7 +725,7 @@ export default function Arcade({
     <div className="screen screen-stack-tight">
       <section className="panel section-intro">
         <p className="eyebrow">Invite conflict</p>
-        <h2>You already have an active arcade session.</h2>
+        <h2>You already have a saved arcade session.</h2>
         <p className="muted">
           Choose whether to resume the current session or discard it and open the
           incoming invite.
@@ -662,18 +735,14 @@ export default function Arcade({
         <button
           type="button"
           className="primary-btn full-width-mobile"
-          onClick={() => setConflictingInvite(null)}
+          onClick={handleResumeRecovery}
         >
           Resume current session
         </button>
         <button
           type="button"
           className="secondary-btn full-width-mobile"
-          onClick={() => {
-            actions.resetSession();
-            setConflictingInvite(null);
-            setPendingInvite(conflictingInvite);
-          }}
+          onClick={handleDiscardAndOpenInvite}
         >
           Open invite instead
         </button>
@@ -690,8 +759,11 @@ export default function Arcade({
           hasXmtp={hasXmtp}
           games={GAMES}
           selectedGameKey={state.selectedGameKey}
+          recoverySummary={recoverySummary}
           onSelectGame={handleSelectGame}
           onContinue={handleContinueFromHome}
+          onResumeRecovery={handleResumeRecovery}
+          onResetArcade={handleResetArcade}
           onOpenAccount={onOpenAccount}
         />
       );
@@ -765,6 +837,19 @@ export default function Arcade({
     <div className="arcade-page">
       <div className="arcade-shell">
         {state.error ? <div className="banner error">{state.error}</div> : null}
+        {state.phase !== PHASE.HOME || state.recovery.available ? (
+          <div className="arcade-shell-actions">
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={() => {
+                void handleResetArcade();
+              }}
+            >
+              Reset arcade
+            </button>
+          </div>
+        ) : null}
         {content}
       </div>
     </div>

@@ -10,14 +10,20 @@ export default function ClashBoard({
   placementActive = false,
   className = "",
 }) {
+  const boardSize = Math.max(1, Math.round(Math.sqrt(board.length || 0)));
+
   return (
     <section className={`board-card ${highlighted ? 'board-card-highlighted' : ''} ${placementActive ? 'board-card-placement-active' : ''} ${className}`.trim()}>
       {title ? <h3>{title}</h3> : null}
       {subtitle ? <p className="board-subtitle">{subtitle}</p> : null}
-      <div className="board-grid clash-board-grid" role="grid">
+      <div
+        className="board-grid clash-board-grid"
+        role="grid"
+        style={{ gridTemplateColumns: `repeat(${boardSize}, minmax(0, 1fr))` }}
+      >
         {board.map((value, index) => {
-          const x = index % 8;
-          const y = Math.floor(index / 8);
+          const x = index % boardSize;
+          const y = Math.floor(index / boardSize);
           return (
             <button
               key={`${x}-${y}`}

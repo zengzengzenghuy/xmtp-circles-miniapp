@@ -1,6 +1,6 @@
 import { keccak256 } from "viem";
 import { bytesToHex, hexToBytes, normalizeHex } from '../../battleship/helpers/board.js';
-import { PIECE_INDEX } from './pieces.js';
+import { BLOCK_CLASH_BOARD_SIZE, PIECE_INDEX } from './pieces.js';
 import { validateLoadout } from './board.js';
 
 export function generateSalt() {
@@ -37,13 +37,13 @@ export function buildBlockClashCommitment(setupState) {
       salt,
     },
     publicConfig: {
-      boardSize: 8,
+      boardSize: BLOCK_CLASH_BOARD_SIZE,
       catalogId: 'block-clash-v1',
     },
     gameState: {
-      boardSize: 8,
+      boardSize: BLOCK_CLASH_BOARD_SIZE,
       placements: [],
-      occupiedBoard: Array(64).fill(0),
+      occupiedBoard: Array(BLOCK_CLASH_BOARD_SIZE * BLOCK_CLASH_BOARD_SIZE).fill(0),
       mySelectedPieceIds: [...setupState.selectedPieceIds].sort(),
       opponentSelectedPieceIdsRevealed: [],
       turn: 'creator',

@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useReducer } from "react";
+import { getGameDefinition } from "../gameRegistry.js";
 import {
   EMPTY_COMMITMENT,
   PHASE,
   SESSION_STATUS,
 } from "../helpers/constants.js";
 import {
+  clearAllArcadeStateForAddress,
   clearActiveSessionRef,
-  clearPersistedState,
-  clearSecretState,
   loadActiveSessionRef,
   loadPersistedState,
   loadSecretState,
@@ -36,6 +36,14 @@ function createInitialSession(gameKey = "") {
   };
 }
 
+function createInitialRecovery() {
+  return {
+    available: false,
+    snapshot: null,
+    source: null,
+  };
+}
+
 export function createInitialArcadeState() {
   return {
     hydrated: false,
@@ -50,6 +58,7 @@ export function createInitialArcadeState() {
     commitment: "",
     info: "",
     error: "",
+    recovery: createInitialRecovery(),
     verification: {
       canConfirm: false,
       contested: false,
@@ -67,14 +76,92 @@ function mergeSession(current, next = {}) {
   };
 }
 
+function isKnownPhase(phase) {
+  return Object.values(PHASE).includes(phase);
+}
+
+function isValidRecoverySnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") {
+    return false;
+  }
+
+  if (!snapshot.selectedGameKey || !getGameDefinition(snapshot.selectedGameKey)) {
+    return false;
+  }
+
+  if (!isKnownPhase(snapshot.phase) || snapshot.phase === PHASE.HOME) {
+    return false;
+  }
+
+  const session = snapshot.session || {};
+  if (session.gameKey && session.gameKey !== snapshot.selectedGameKey) {
+    return false;
+  }
+
+  switch (snapshot.phase) {
+    case PHASE.SETUP:
+      return Boolean(snapshot.gameSetupState);
+    case PHASE.CREATE_INVITE:
+    case PHASE.JOIN_INVITE:
+      return Boolean(
+        session.sessionId &&
+          snapshot.gameState &&
+          snapshot.secretState &&
+          snapshot.commitment,
+      );
+    case PHASE.PLAYING:
+    case PHASE.RESULT:
+      return Boolean(
+        session.sessionId &&
+          session.role &&
+          snapshot.gameState &&
+          snapshot.secretState,
+      );
+    default:
+      return false;
+  }
+}
+
 export function arcadeStateReducer(state, action) {
   switch (action.type) {
+    case "BOOTSTRAP_ADDRESS":
+      return {
+        ...createInitialArcadeState(),
+        address: action.address || "",
+      };
     case "HYDRATE":
       return {
         ...createInitialArcadeState(),
         ...action.payload,
         address: action.address || state.address,
         hydrated: true,
+      };
+    case "SET_RECOVERY":
+      return {
+        ...createInitialArcadeState(),
+        hydrated: true,
+        address: action.address || state.address,
+        recovery: {
+          available: true,
+          snapshot: action.snapshot,
+          source: action.source,
+        },
+      };
+    case "CLEAR_RECOVERY":
+      return {
+        ...state,
+        recovery: createInitialRecovery(),
+      };
+    case "RESUME_RECOVERY":
+      if (!state.recovery.snapshot) {
+        return state;
+      }
+      return {
+        ...createInitialArcadeState(),
+        ...state.recovery.snapshot,
+        address: state.address,
+        hydrated: true,
+        recovery: createInitialRecovery(),
       };
     case "SET_HYDRATED":
       return {
@@ -241,7 +328,7 @@ export function useArcadeState({ address }) {
   );
 
   useEffect(() => {
-    dispatch({ type: "SET_ADDRESS", address });
+    dispatch({ type: "BOOTSTRAP_ADDRESS", address });
     if (!address) {
       dispatch({ type: "SET_HYDRATED" });
       return;
@@ -265,15 +352,25 @@ export function useArcadeState({ address }) {
     );
 
     if (persisted) {
-      dispatch({
-        type: "HYDRATE",
-        payload: {
-          ...persisted,
-          secretState: secret ?? persisted.secretState ?? null,
-        },
-        address,
-      });
-      return;
+      const snapshot = {
+        ...persisted,
+        secretState: secret ?? persisted.secretState ?? null,
+      };
+
+      if (isValidRecoverySnapshot(snapshot)) {
+        dispatch({
+          type: "SET_RECOVERY",
+          snapshot,
+          source: {
+            gameKey: activeRef.gameKey,
+            sessionId: activeRef.sessionId,
+          },
+          address,
+        });
+        return;
+      }
+
+      clearAllArcadeStateForAddress(address);
     }
 
     dispatch({ type: "SET_HYDRATED" });
@@ -281,6 +378,15 @@ export function useArcadeState({ address }) {
 
   useEffect(() => {
     if (!state.hydrated || !state.address) {
+      return;
+    }
+
+    if (state.recovery.available && state.recovery.source) {
+      saveActiveSessionRef(
+        state.address,
+        state.recovery.source.gameKey,
+        state.recovery.source.sessionId,
+      );
       return;
     }
 
@@ -316,25 +422,11 @@ export function useArcadeState({ address }) {
   }, [state]);
 
   const resetSession = useCallback(() => {
-    if (state.address && state.selectedGameKey) {
-      clearPersistedState(
-        state.address,
-        state.selectedGameKey,
-        state.session.sessionId || "draft",
-      );
-      clearPersistedState(state.address, state.selectedGameKey, "draft");
-      clearSecretState(
-        state.address,
-        state.selectedGameKey,
-        state.session.sessionId || "draft",
-      );
-      clearSecretState(state.address, state.selectedGameKey, "draft");
-    }
     if (state.address) {
-      clearActiveSessionRef(state.address);
+      clearAllArcadeStateForAddress(state.address);
     }
     dispatch({ type: "RESET_SESSION" });
-  }, [state.address, state.selectedGameKey, state.session.sessionId]);
+  }, [state.address]);
 
   const actions = useMemo(
     () => ({
@@ -358,6 +450,8 @@ export function useArcadeState({ address }) {
       activateSession: (payload) => dispatch({ type: "ACTIVATE_SESSION", ...payload }),
       applyProtocolResult: (result) =>
         dispatch({ type: "APPLY_PROTOCOL_RESULT", ...result }),
+      clearRecovery: () => dispatch({ type: "CLEAR_RECOVERY" }),
+      resumeRecovery: () => dispatch({ type: "RESUME_RECOVERY" }),
       resetSession,
     }),
     [resetSession],
