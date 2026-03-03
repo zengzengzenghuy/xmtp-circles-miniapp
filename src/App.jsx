@@ -111,7 +111,9 @@ function App() {
       if (isMiniapp) {
         // Running inside newCore host — use Safe SCW signer via postMessage
         // The host's Safe wallet produces ERC-1271-compatible EIP-712 SafeMessage signatures
-        console.log("Creating SCW signer for miniapp mode (Gnosis chainId=100)");
+        console.log(
+          "Creating SCW signer for miniapp mode (Gnosis chainId=100)",
+        );
         signer = createSCWSigner(
           activeAddress,
           async (message) => {
@@ -317,22 +319,11 @@ function App() {
             <h1>XMTP Chat</h1>
             {effectiveConnected && effectiveAddress && (
               <div className="connected-address">
-                <span className="address-value">{formatAddress(effectiveAddress)}</span>
+                <span className="address-value">
+                  {formatAddress(effectiveAddress)}
+                </span>
               </div>
             )}
-          </div>
-          <div className="header-right">
-            <div className="header-toggle-container">
-              <span className="header-toggle-label">Circles Mode</span>
-              <label className="toggle-switch">
-                <input
-                  type="checkbox"
-                  checked={circlesMode}
-                  onChange={handleCirclesModeToggle}
-                />
-                <span className="toggle-slider"></span>
-              </label>
-            </div>
           </div>
         </div>
       </header>
