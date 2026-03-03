@@ -8,6 +8,8 @@ export const GAME_KEYS = {
 
 export const PHASE = {
   HOME: "HOME",
+  PAYMENT_SELECT: "PAYMENT_SELECT",
+  PAYMENT_WAIT: "PAYMENT_WAIT",
   SETUP: "SETUP",
   CREATE_INVITE: "CREATE_INVITE",
   JOIN_INVITE: "JOIN_INVITE",
@@ -29,3 +31,10 @@ export const LIFECYCLE_TYPES = {
 };
 
 export const EMPTY_COMMITMENT = `0x${"00".repeat(32)}`;
+
+export const PAYMENT_WATCH_STATUS = {
+  IDLE: "idle",
+  WAITING: "waiting",
+  CONFIRMED: "confirmed",
+  ERROR: "error",
+};

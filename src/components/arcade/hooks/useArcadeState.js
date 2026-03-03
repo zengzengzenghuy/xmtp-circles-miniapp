@@ -3,6 +3,7 @@ import { getGameDefinition } from "../gameRegistry.js";
 import {
   EMPTY_COMMITMENT,
   PHASE,
+  PAYMENT_WATCH_STATUS,
   SESSION_STATUS,
 } from "../helpers/constants.js";
 import {
@@ -44,6 +45,20 @@ function createInitialRecovery() {
   };
 }
 
+function createInitialPayment() {
+  return {
+    mode: "free",
+    actor: "",
+    selection: "",
+    amountCrc: 0,
+    marker: "",
+    txHashes: [],
+    watchStatus: PAYMENT_WATCH_STATUS.IDLE,
+    confirmedPayment: null,
+    error: "",
+  };
+}
+
 export function createInitialArcadeState() {
   return {
     hydrated: false,
@@ -56,6 +71,7 @@ export function createInitialArcadeState() {
     gameState: null,
     secretState: null,
     commitment: "",
+    payment: createInitialPayment(),
     info: "",
     error: "",
     recovery: createInitialRecovery(),
@@ -73,6 +89,16 @@ function mergeSession(current, next = {}) {
     ...current,
     ...next,
     publicConfig: next.publicConfig ?? current.publicConfig ?? {},
+  };
+}
+
+function mergePayment(current, next = {}) {
+  return {
+    ...current,
+    ...next,
+    txHashes: next.txHashes ?? current.txHashes ?? [],
+    confirmedPayment:
+      next.confirmedPayment ?? current.confirmedPayment ?? null,
   };
 }
 
@@ -99,6 +125,20 @@ function isValidRecoverySnapshot(snapshot) {
   }
 
   switch (snapshot.phase) {
+    case PHASE.PAYMENT_SELECT:
+      return Boolean(
+        session.sessionId &&
+          snapshot.payment?.actor &&
+          snapshot.payment?.mode === "paid",
+      );
+    case PHASE.PAYMENT_WAIT:
+      return Boolean(
+        session.sessionId &&
+          snapshot.payment?.actor &&
+          snapshot.payment?.mode === "paid" &&
+          snapshot.payment?.marker &&
+          snapshot.payment?.amountCrc > 0,
+      );
     case PHASE.SETUP:
       return Boolean(snapshot.gameSetupState);
     case PHASE.CREATE_INVITE:
@@ -182,6 +222,33 @@ export function arcadeStateReducer(state, action) {
         selectedGameKey: action.gameKey,
         session: createInitialSession(action.gameKey),
       };
+    case "START_PAYMENT_SELECT":
+      return {
+        ...state,
+        phase: PHASE.PAYMENT_SELECT,
+        selectedGameKey: action.gameKey || state.selectedGameKey,
+        invite: action.invite ?? state.invite,
+        session: mergeSession(state.session, {
+          ...action.session,
+          gameKey:
+            action.gameKey ||
+            state.selectedGameKey ||
+            state.session.gameKey,
+        }),
+        payment: mergePayment(createInitialPayment(), {
+          mode: "paid",
+          actor: action.actor || "",
+          selection: action.selection || "",
+          amountCrc: action.amountCrc || 0,
+          marker: action.marker || "",
+          txHashes: action.txHashes || [],
+          watchStatus: action.watchStatus || PAYMENT_WATCH_STATUS.IDLE,
+          confirmedPayment: action.confirmedPayment || null,
+          error: action.paymentError || "",
+        }),
+        info: action.info ?? state.info,
+        error: action.error || "",
+      };
     case "SELECT_GAME":
       return {
         ...state,
@@ -230,6 +297,11 @@ export function arcadeStateReducer(state, action) {
         ...state,
         error: action.error || "",
       };
+    case "SET_PAYMENT":
+      return {
+        ...state,
+        payment: mergePayment(state.payment, action.payment),
+      };
     case "SET_INFO":
       return {
         ...state,
@@ -253,6 +325,46 @@ export function arcadeStateReducer(state, action) {
         phase: action.phase,
         info: action.info || "",
         error: "",
+      };
+    case "SET_PAYMENT_WAITING":
+      return {
+        ...state,
+        phase: PHASE.PAYMENT_WAIT,
+        session: mergeSession(state.session, action.session),
+        payment: mergePayment(state.payment, {
+          ...action.payment,
+          watchStatus: PAYMENT_WATCH_STATUS.WAITING,
+          error: "",
+        }),
+        info: action.info ?? state.info,
+        error: "",
+      };
+    case "SET_PAYMENT_CONFIRMED":
+      return {
+        ...state,
+        phase: action.phase ?? state.phase,
+        payment: mergePayment(state.payment, {
+          ...action.payment,
+          watchStatus: PAYMENT_WATCH_STATUS.CONFIRMED,
+          error: "",
+        }),
+        info: action.info ?? state.info,
+        error: "",
+      };
+    case "SET_PAYMENT_ERROR":
+      return {
+        ...state,
+        payment: mergePayment(state.payment, {
+          ...action.payment,
+          watchStatus: PAYMENT_WATCH_STATUS.ERROR,
+          error: action.paymentError || "",
+        }),
+        error: action.error ?? state.error,
+      };
+    case "CLEAR_PAYMENT":
+      return {
+        ...state,
+        payment: createInitialPayment(),
       };
     case "SET_READY":
       return {
@@ -431,6 +543,8 @@ export function useArcadeState({ address }) {
   const actions = useMemo(
     () => ({
       startGame: (gameKey) => dispatch({ type: "START_GAME", gameKey }),
+      startPaymentSelect: (payload) =>
+        dispatch({ type: "START_PAYMENT_SELECT", ...payload }),
       selectGame: (gameKey) => dispatch({ type: "SELECT_GAME", gameKey }),
       startInvite: (invite) => dispatch({ type: "START_INVITE", invite }),
       setInvite: (invite) => dispatch({ type: "SET_INVITE", invite }),
@@ -440,11 +554,19 @@ export function useArcadeState({ address }) {
       setGameState: (gameState) =>
         dispatch({ type: "SET_GAME_STATE", gameState }),
       setError: (error) => dispatch({ type: "SET_ERROR", error }),
+      setPayment: (payment) => dispatch({ type: "SET_PAYMENT", payment }),
       setInfo: (info) => dispatch({ type: "SET_INFO", info }),
       setVerification: (verification) =>
         dispatch({ type: "SET_VERIFICATION", verification }),
       setCommittedSetup: (payload) =>
         dispatch({ type: "SET_COMMITTED_SETUP", ...payload }),
+      setPaymentWaiting: (payload) =>
+        dispatch({ type: "SET_PAYMENT_WAITING", ...payload }),
+      setPaymentConfirmed: (payload) =>
+        dispatch({ type: "SET_PAYMENT_CONFIRMED", ...payload }),
+      setPaymentError: (payload) =>
+        dispatch({ type: "SET_PAYMENT_ERROR", ...payload }),
+      clearPayment: () => dispatch({ type: "CLEAR_PAYMENT" }),
       setReady: (payload) => dispatch({ type: "SET_READY", ...payload }),
       updateSession: (session) => dispatch({ type: "UPDATE_SESSION", session }),
       activateSession: (payload) => dispatch({ type: "ACTIVATE_SESSION", ...payload }),

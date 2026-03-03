@@ -399,6 +399,7 @@ function App() {
             xmtpClient={xmtpClient}
             onOpenAccount={() => setActiveTab("account")}
             initialInvite={initialArcadeInviteResult.invite}
+            isMiniapp={isMiniapp}
           />
         ) : (
           <AccountPage

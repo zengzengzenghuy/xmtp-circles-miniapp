@@ -25,6 +25,13 @@ export default defineConfig({
   base: process.env.NODE_ENV === "production" ? "/xmtp-circles-miniapp" : "/",
   server: {
     port: 5182,
+    proxy: {
+      "/circles-rpc": {
+        target: "https://rpc.aboutcircles.com",
+        changeOrigin: true,
+        rewrite: () => "/",
+      },
+    },
   },
   build: {
     outDir: "dist",

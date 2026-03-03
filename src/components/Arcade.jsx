@@ -11,18 +11,25 @@ import {
 } from "./arcade/protocol/shellProtocol.js";
 import { useArcadeState } from "./arcade/hooks/useArcadeState.js";
 import { useArcadeTransport } from "./arcade/hooks/useArcadeTransport.js";
+import { usePaymentWatcher } from "./arcade/hooks/usePaymentWatcher.js";
 import {
   buildInviteLink,
   createInvitePayload,
 } from "./arcade/helpers/invite.js";
 import {
   PHASE,
+  PAYMENT_WATCH_STATUS,
   SESSION_STATUS,
 } from "./arcade/helpers/constants.js";
+import { getArcadeConfig } from "./arcade/helpers/config.js";
+import { buildPaymentMarker } from "./arcade/payments/marker.js";
+import { buildPaymentTransferUrl } from "./arcade/payments/transactions.js";
 import ArcadeHome from "./arcade/screens/ArcadeHome.jsx";
 import SetupSession from "./arcade/screens/SetupSession.jsx";
 import CreateInvite from "./arcade/screens/CreateInvite.jsx";
 import JoinInvite from "./arcade/screens/JoinInvite.jsx";
+import PaymentSelect from "./arcade/screens/PaymentSelect.jsx";
+import PaymentWait from "./arcade/screens/PaymentWait.jsx";
 import PlaySession from "./arcade/screens/PlaySession.jsx";
 import SessionResult from "./arcade/screens/SessionResult.jsx";
 
@@ -46,15 +53,24 @@ function formatSummaryLabel(value) {
   return normalized ? normalized.charAt(0).toUpperCase() + normalized.slice(1) : "";
 }
 
+function getBillingFromInvite(invite) {
+  if (invite?.publicConfig?.billing?.mode === "paid") {
+    return invite.publicConfig.billing;
+  }
+  return { mode: "free" };
+}
+
 export default function Arcade({
   address,
   connected,
   xmtpClient,
   onOpenAccount,
   initialInvite,
+  isMiniapp,
 }) {
   const { state, actions } = useArcadeState({ address });
   const transport = useArcadeTransport({ xmtpClient, address });
+  const arcadeConfig = useMemo(() => getArcadeConfig(), []);
   const [inviteLink, setInviteLink] = useState("");
   const [pendingInvite, setPendingInvite] = useState(initialInvite);
   const [conflictingInvite, setConflictingInvite] = useState(null);
@@ -67,6 +83,48 @@ export default function Arcade({
     () => getGameDefinition(state.selectedGameKey || pendingInvite?.gameKey),
     [pendingInvite?.gameKey, state.selectedGameKey],
   );
+  const activeBilling = useMemo(
+    () =>
+      state.invite?.publicConfig?.billing ||
+      pendingInvite?.publicConfig?.billing ||
+      state.session.publicConfig?.billing ||
+      null,
+    [
+      pendingInvite?.publicConfig?.billing,
+      state.invite?.publicConfig?.billing,
+      state.session.publicConfig?.billing,
+    ],
+  );
+  const paymentConfigError = useMemo(() => {
+    if (
+      (arcadeConfig.paidMode || activeBilling?.mode === "paid") &&
+      !arcadeConfig.paymentRecipientConfigured
+    ) {
+      return "Payment recipient address is not configured correctly.";
+    }
+    return "";
+  }, [
+    activeBilling?.mode,
+    arcadeConfig.paidMode,
+    arcadeConfig.paymentRecipientConfigured,
+  ]);
+  const paymentUrl = useMemo(() => {
+    if (!state.payment.marker || !state.payment.amountCrc) {
+      return "";
+    }
+
+    return buildPaymentTransferUrl({
+      transferBaseUrl: arcadeConfig.paymentTransferBaseUrl,
+      recipientAddress: arcadeConfig.paymentRecipientAddress,
+      amountCrc: state.payment.amountCrc,
+      marker: { hex: state.payment.marker },
+    });
+  }, [
+    arcadeConfig.paymentRecipientAddress,
+    arcadeConfig.paymentTransferBaseUrl,
+    state.payment.amountCrc,
+    state.payment.marker,
+  ]);
   const recoverySummary = useMemo(() => {
     if (!state.recovery.available || !state.recovery.snapshot) {
       return null;
@@ -83,6 +141,20 @@ export default function Arcade({
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  const paymentWatcherEnabled =
+    state.phase === PHASE.PAYMENT_WAIT &&
+    state.payment.watchStatus !== PAYMENT_WATCH_STATUS.ERROR &&
+    Boolean(state.payment.marker) &&
+    state.payment.amountCrc > 0;
+  const paymentWatcher = usePaymentWatcher({
+    enabled: paymentWatcherEnabled,
+    rpcUrl: arcadeConfig.circlesRpcUrl,
+    dataValue: state.payment.marker,
+    minAmountCRC: state.payment.amountCrc,
+    recipientAddress: arcadeConfig.paymentRecipientAddress,
+    intervalMs: arcadeConfig.paymentPollIntervalMs,
+  });
 
   const initializeForGame = useCallback(
     (gameKey, invite = null) => {
@@ -105,6 +177,52 @@ export default function Arcade({
       setInviteLink("");
     },
     [actions],
+  );
+
+  const preparePaidFlow = useCallback(
+    (gameKey, actor, invite = null) => {
+      const game = getGameDefinition(gameKey);
+      if (!game) {
+        actions.setError("Selected game is not available.");
+        return;
+      }
+
+      if (invite) {
+        actions.startInvite(invite);
+      } else {
+        actions.startGame(gameKey);
+      }
+
+      actions.setSetupState(game.createInitialSetupState());
+      actions.setGameState(game.createInitialState());
+      actions.clearPayment();
+      actions.startPaymentSelect({
+        actor,
+        gameKey,
+        invite,
+        session: invite
+          ? {
+              sessionId: invite.sessionId,
+              gameKey: invite.gameKey,
+              role: "joiner",
+              creatorAddress: invite.creatorAddress,
+              creatorCommitment: invite.creatorCommitment,
+              publicConfig: invite.publicConfig || {},
+            }
+          : {
+              sessionId: createSessionId(address),
+              gameKey,
+              role: "creator",
+              creatorAddress: address,
+            },
+        info: invite
+          ? "Choose how you want to join this paid session."
+          : `Complete payment before ${game.label} setup unlocks.`,
+      });
+      actions.setError("");
+      setInviteLink("");
+    },
+    [actions, address],
   );
 
   const clearStream = useCallback(async () => {
@@ -150,12 +268,18 @@ export default function Arcade({
     }
 
     if (state.phase === PHASE.HOME) {
-      initializeForGame(pendingInvite.gameKey, pendingInvite);
+      const inviteBilling = getBillingFromInvite(pendingInvite);
+      if (inviteBilling.mode === "paid") {
+        preparePaidFlow(pendingInvite.gameKey, "joiner", pendingInvite);
+      } else {
+        initializeForGame(pendingInvite.gameKey, pendingInvite);
+      }
       setPendingInvite(null);
     }
   }, [
     initializeForGame,
     pendingInvite,
+    preparePaidFlow,
     state.hydrated,
     state.phase,
     state.recovery.available,
@@ -187,6 +311,36 @@ export default function Arcade({
     state.session.publicConfig,
     state.session.sessionId,
     state.session.status,
+  ]);
+
+  useEffect(() => {
+    if (state.phase !== PHASE.PAYMENT_WAIT) {
+      return;
+    }
+
+    if (paymentWatcher.status === PAYMENT_WATCH_STATUS.CONFIRMED && paymentWatcher.payment) {
+      actions.setPaymentConfirmed({
+        phase: PHASE.SETUP,
+        payment: {
+          confirmedPayment: paymentWatcher.payment,
+        },
+        info: "Payment confirmed. Setup is unlocked.",
+      });
+      return;
+    }
+
+    if (paymentWatcher.status === PAYMENT_WATCH_STATUS.ERROR && paymentWatcher.error) {
+      actions.setPaymentError({
+        payment: {},
+        paymentError: paymentWatcher.error,
+      });
+    }
+  }, [
+    actions,
+    paymentWatcher.error,
+    paymentWatcher.payment,
+    paymentWatcher.status,
+    state.phase,
   ]);
 
   const connectAndReplay = useCallback(
@@ -425,9 +579,143 @@ export default function Arcade({
 
   const handleContinueFromHome = useCallback(() => {
     if (state.selectedGameKey) {
-      initializeForGame(state.selectedGameKey);
+      if (arcadeConfig.paidMode) {
+        preparePaidFlow(state.selectedGameKey, "creator");
+      } else {
+        initializeForGame(state.selectedGameKey);
+      }
     }
-  }, [initializeForGame, state.selectedGameKey]);
+  }, [
+    arcadeConfig.paidMode,
+    initializeForGame,
+    preparePaidFlow,
+    state.selectedGameKey,
+  ]);
+
+  const openPaymentUrl = useCallback(
+    (nextUrl = paymentUrl) => {
+      if (!nextUrl) {
+        actions.setPaymentError({
+          paymentError: "Payment URL could not be created.",
+        });
+        return;
+      }
+
+      window.requestAnimationFrame(() => {
+        window.location.assign(nextUrl);
+      });
+    },
+    [actions, paymentUrl],
+  );
+
+  const beginPayment = useCallback(
+    (actor, amountCrc, selection) => {
+      if (!state.session.sessionId) {
+        actions.setPaymentError({
+          paymentError: "Session is not ready for payment.",
+        });
+        return;
+      }
+
+      if (paymentConfigError) {
+        actions.setPaymentError({
+          paymentError: paymentConfigError,
+        });
+        return;
+      }
+
+      const marker = buildPaymentMarker({
+        sessionId: state.session.sessionId,
+        payerRole: actor,
+        payerAddress: state.address,
+        amountCrc,
+      });
+      const nextUrl = buildPaymentTransferUrl({
+        transferBaseUrl: arcadeConfig.paymentTransferBaseUrl,
+        recipientAddress: arcadeConfig.paymentRecipientAddress,
+        amountCrc,
+        marker,
+      });
+
+      actions.setPaymentWaiting({
+        session:
+          actor === "creator"
+            ? {
+                role: "creator",
+                creatorAddress: state.address,
+              }
+            : {
+                role: "joiner",
+                joinerAddress: state.address,
+              },
+        payment: {
+          mode: "paid",
+          actor,
+          selection,
+          amountCrc,
+          marker: marker.hex,
+          txHashes: [],
+          confirmedPayment: null,
+        },
+        info: "Finish the transfer in Gnosis and return here. Payment confirmation will unlock the session.",
+      });
+      openPaymentUrl(nextUrl);
+    },
+    [
+      actions,
+      arcadeConfig.paymentRecipientAddress,
+      arcadeConfig.paymentTransferBaseUrl,
+      openPaymentUrl,
+      paymentConfigError,
+      state.address,
+      state.session.sessionId,
+    ],
+  );
+
+  const handleBeginCreatorHalfPayment = useCallback(() => {
+    beginPayment("creator", 1, "creator_half");
+  }, [beginPayment]);
+
+  const handleBeginCreatorFullPayment = useCallback(() => {
+    beginPayment("creator", 2, "creator_full");
+  }, [beginPayment]);
+
+  const handleBeginJoinerPayment = useCallback(() => {
+    beginPayment("joiner", 1, "joiner_pay");
+  }, [beginPayment]);
+
+  const handlePaymentFreeJoin = useCallback(() => {
+    actions.setPayment({
+      mode: "paid",
+      actor: "joiner",
+      selection: "joiner_free",
+      amountCrc: 0,
+      marker: "",
+      watchStatus: PAYMENT_WATCH_STATUS.IDLE,
+      confirmedPayment: null,
+      error: "",
+    });
+    actions.setPhase(PHASE.SETUP);
+    actions.setInfo("You chose to join without a payment.");
+  }, [actions]);
+
+  const handleRetryPaymentWatch = useCallback(() => {
+    actions.setPayment({
+      watchStatus: PAYMENT_WATCH_STATUS.WAITING,
+      error: "",
+    });
+    actions.setError("");
+  }, [actions]);
+
+  const handleBackFromPayment = useCallback(() => {
+    if (state.invite) {
+      actions.resetSession();
+      setPendingInvite(state.invite);
+      return;
+    }
+
+    actions.resetSession();
+  }, [actions, state.invite]);
 
   const handleSetupAction = useCallback(
     (action) => {
@@ -489,6 +777,17 @@ export default function Arcade({
       }
 
       const sessionId = state.session.sessionId || createSessionId(state.address);
+      const billing =
+        state.payment.mode === "paid"
+          ? {
+              mode: "paid",
+              creatorFeeCrc: state.payment.amountCrc,
+              inviteeFeeCrc: 1,
+              inviteeCanPlayFree: true,
+            }
+          : {
+              mode: "free",
+            };
       actions.setCommittedSetup({
         commitment: built.commitment,
         secretState: built.secretState,
@@ -502,7 +801,10 @@ export default function Arcade({
           status: SESSION_STATUS.WAITING_FOR_JOIN,
           creatorAddress: state.address,
           creatorCommitment: built.commitment,
-          publicConfig: built.publicConfig,
+          publicConfig: {
+            ...built.publicConfig,
+            billing,
+          },
           turn: "creator",
           mySeq: 1,
           expectedOpponentSeq: 1,
@@ -520,6 +822,8 @@ export default function Arcade({
     state.address,
     state.gameSetupState,
     state.invite,
+    state.payment.amountCrc,
+    state.payment.mode,
     state.session.sessionId,
   ]);
 
@@ -765,6 +1069,35 @@ export default function Arcade({
           onResumeRecovery={handleResumeRecovery}
           onResetArcade={handleResetArcade}
           onOpenAccount={onOpenAccount}
+        />
+      );
+    } else if (state.phase === PHASE.PAYMENT_SELECT) {
+      content = (
+        <PaymentSelect
+          actor={state.payment.actor}
+          selectedGame={selectedGame}
+          billing={activeBilling}
+          recipientAddress={arcadeConfig.paymentRecipientAddress}
+          configError={paymentConfigError}
+          onCreatorHalf={handleBeginCreatorHalfPayment}
+          onCreatorFull={handleBeginCreatorFullPayment}
+          onJoinerPay={handleBeginJoinerPayment}
+          onJoinerFree={handlePaymentFreeJoin}
+          onBack={state.invite ? handleBackFromPayment : null}
+        />
+      );
+    } else if (state.phase === PHASE.PAYMENT_WAIT) {
+      content = (
+        <PaymentWait
+          selectedGame={selectedGame}
+          payment={state.payment}
+          recipientAddress={arcadeConfig.paymentRecipientAddress}
+          paymentUrl={paymentUrl}
+          status={formatSummaryLabel(paymentWatcher.status || state.payment.watchStatus)}
+          info={state.info}
+          error={state.payment.error || state.error}
+          onOpenPayment={() => openPaymentUrl()}
+          onRetry={handleRetryPaymentWatch}
         />
       );
     } else if (state.phase === PHASE.SETUP) {

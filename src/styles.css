@@ -1928,6 +1928,16 @@ body {
   line-height: 1.45;
 }
 
+.arcade-page .payment-marker-code {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: pre-wrap;
+  line-height: 1.45;
+}
+
 .arcade-page .piece-card {
   align-items: center;
   display: flex;
