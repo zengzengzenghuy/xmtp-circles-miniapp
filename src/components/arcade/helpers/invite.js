@@ -38,6 +38,7 @@ export function encodeInvitePayload(payload) {
 
 export function buildInviteLink(baseUrl, payload) {
   const url = new URL(baseUrl, window.location.origin);
+  url.searchParams.delete(ARCADE_INVITE_PARAM);
   url.searchParams.set(ARCADE_INVITE_PARAM, encodeInvitePayload(payload));
   return url.toString();
 }

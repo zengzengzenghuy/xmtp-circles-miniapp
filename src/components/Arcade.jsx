@@ -40,8 +40,8 @@ function createSessionId(address) {
   return `${String(address || "arcade").slice(2, 8)}:${seed}`;
 }
 
-function buildCurrentInviteUrl(payload) {
-  return buildInviteLink(window.location.href, payload);
+function buildCurrentInviteUrl(baseUrl, payload) {
+  return buildInviteLink(baseUrl || window.location.href, payload);
 }
 
 function safeLower(value) {
@@ -302,8 +302,9 @@ export default function Arcade({
       creatorCommitment: state.session.creatorCommitment,
       publicConfig: state.session.publicConfig,
     });
-    setInviteLink(buildCurrentInviteUrl(invitePayload));
+    setInviteLink(buildCurrentInviteUrl(arcadeConfig.inviteBaseUrl, invitePayload));
   }, [
+    arcadeConfig.inviteBaseUrl,
     selectedGame,
     state.phase,
     state.session.creatorAddress,
@@ -505,6 +506,17 @@ export default function Arcade({
               }
             },
           });
+
+          const history = await transport.loadSessionMessages({
+            sessionId: state.session.sessionId,
+            gameKey: selectedGame.key,
+          });
+
+          for (const message of history) {
+            if (!cancelled) {
+              await onArcadeMessage(message);
+            }
+          }
         } catch (error) {
           actions.setError(error.message || "Failed to listen for join messages");
         }
