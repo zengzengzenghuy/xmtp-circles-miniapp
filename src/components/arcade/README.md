@@ -262,6 +262,20 @@ Invite payload contains:
 - `publicConfig`
 - `createdAt`
 
+### Canonical Invite Host
+
+Invite links do not have to use the creator's current host.
+
+If `VITE_ARCADE_INVITE_BASE_URL` is configured, arcade invite generation uses that canonical URL as the base and appends `?arcadeInvite=...`.
+
+Example production value:
+
+```txt
+https://circles.gnosis.io/miniapps/xmtp-circles-demo
+```
+
+If the env var is unset or invalid, arcade falls back to the current runtime URL. This keeps local development and preview deployments usable.
+
 ### Creator Free Flow
 
 1. Pick a game on home.
@@ -290,6 +304,7 @@ Supported env vars:
 
 ```env
 VITE_ARCADE_FREE_MODE=true
+VITE_ARCADE_INVITE_BASE_URL=https://circles.gnosis.io/miniapps/xmtp-circles-demo
 VITE_ARCADE_PAYMENT_RECIPIENT_ADDRESS=0x8132139D4ec3f68Cd3eddE9baF9d2137edca5849
 VITE_CIRCLES_RPC_URL=https://rpc.aboutcircles.com/
 VITE_GNOSIS_TRANSFER_BASE_URL=https://app.gnosis.io

@@ -144,6 +144,42 @@ export function useArcadeTransport({ xmtpClient, address }) {
     [address, parseEnvelope],
   );
 
+  const loadSessionMessages = useCallback(
+    async ({ sessionId, gameKey }) => {
+      if (!xmtpClient) {
+        return [];
+      }
+
+      if (conversationRef.current) {
+        return loadConversationMessages({ sessionId, gameKey });
+      }
+
+      await xmtpClient.conversations.sync();
+      const conversations = await xmtpClient.conversations.listDms();
+      const matchedMessages = [];
+
+      for (const conversation of conversations) {
+        await conversation.sync();
+        const messages = await conversation.messages();
+
+        matchedMessages.push(
+          ...messages
+            .map((message) => parseEnvelope(decodeTextContent(message.content)))
+            .filter(Boolean)
+            .filter((message) => !isOwnEnvelope(message, address))
+            .filter(
+              (message) =>
+                String(message.sessionId) === String(sessionId) &&
+                String(message.gameKey) === String(gameKey),
+            ),
+        );
+      }
+
+      return matchedMessages;
+    },
+    [address, loadConversationMessages, parseEnvelope, xmtpClient],
+  );
+
   const startSessionStream = useCallback(
     async ({ sessionId, gameKey, onMessage }) => {
       if (!xmtpClient) {
@@ -191,6 +227,7 @@ export function useArcadeTransport({ xmtpClient, address }) {
       sendEnvelope,
       sendMany,
       loadConversationMessages,
+      loadSessionMessages,
       startSessionStream,
       resetSessionCache,
     }),
@@ -198,6 +235,7 @@ export function useArcadeTransport({ xmtpClient, address }) {
       address,
       connectToPeer,
       loadConversationMessages,
+      loadSessionMessages,
       resetSessionCache,
       sendEnvelope,
       sendMany,

@@ -34,6 +34,33 @@ function resolveCirclesRpcUrl(value) {
   return configured;
 }
 
+function getCurrentRuntimeUrl() {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  return window.location.href;
+}
+
+function isValidAbsoluteHttpUrl(value) {
+  try {
+    const url = new URL(String(value || "").trim());
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function resolveInviteBaseUrl(value) {
+  const configured = String(value || "").trim();
+
+  if (configured && isValidAbsoluteHttpUrl(configured)) {
+    return configured;
+  }
+
+  return getCurrentRuntimeUrl();
+}
+
 function parseBoolean(value, fallback) {
   if (value === undefined || value === null || value === "") {
     return fallback;
@@ -70,6 +97,9 @@ export function getArcadeConfig() {
   const paymentTransferBaseUrl =
     String(import.meta.env.VITE_GNOSIS_TRANSFER_BASE_URL || "").trim() ||
     DEFAULT_GNOSIS_TRANSFER_BASE_URL;
+  const inviteBaseUrl = resolveInviteBaseUrl(
+    import.meta.env.VITE_ARCADE_INVITE_BASE_URL,
+  );
   const paymentPollIntervalMs = parseInteger(
     import.meta.env.VITE_ARCADE_PAYMENT_POLL_INTERVAL_MS,
     DEFAULT_PAYMENT_POLL_INTERVAL_MS,
@@ -83,6 +113,7 @@ export function getArcadeConfig() {
     paymentRecipientConfigured,
     circlesRpcUrl,
     paymentTransferBaseUrl,
+    inviteBaseUrl,
     paymentPollIntervalMs,
   };
 }
