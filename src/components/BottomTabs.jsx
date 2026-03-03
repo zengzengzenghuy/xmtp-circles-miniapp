@@ -11,6 +11,20 @@ function BottomTabs({ activeTab, onTabChange }) {
         <span className="tab-label">Chat</span>
       </button>
       <button
+        className={`tab-button ${activeTab === 'chatting-room' ? 'active' : ''}`}
+        onClick={() => onTabChange('chatting-room')}
+      >
+        <span className="tab-icon">🏠</span>
+        <span className="tab-label">Chatting Room</span>
+      </button>
+      <button
+        className={`tab-button ${activeTab === 'arcade' ? 'active' : ''}`}
+        onClick={() => onTabChange('arcade')}
+      >
+        <span className="tab-icon">🎮</span>
+        <span className="tab-label">Arcade</span>
+      </button>
+      <button
         className={`tab-button ${activeTab === 'account' ? 'active' : ''}`}
         onClick={() => onTabChange('account')}
       >

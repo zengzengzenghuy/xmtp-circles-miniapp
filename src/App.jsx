@@ -5,6 +5,8 @@ import ConversationList from "./components/ConversationList";
 import MessageArea from "./components/MessageArea";
 import BottomTabs from "./components/BottomTabs";
 import AccountPage from "./components/AccountPage";
+import ChattingRoom from "./components/ChattingRoom";
+import Arcade from "./components/Arcade";
 import NewConversationModal from "./components/NewConversationModal";
 import { createEOASigner, createSCWSigner } from "./helpers/createSigner";
 import {
@@ -372,6 +374,10 @@ function App() {
               />
             </div>
           )
+        ) : activeTab === "chatting-room" ? (
+          <ChattingRoom />
+        ) : activeTab === "arcade" ? (
+          <Arcade />
         ) : (
           <AccountPage
             xmtpClient={xmtpClient}
