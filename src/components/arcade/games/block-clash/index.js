@@ -19,6 +19,8 @@ import ResultPanel from './screens/ResultPanel.jsx';
 export const gameDefinition = {
   key: GAME_KEYS.BLOCK_CLASH,
   label: 'Block Clash',
+  icon: '\u{1F9E9}',
+  shortDescription: 'Place blocks and trap your opponent',
   description: 'Choose a hidden piece loadout, take turns placing tetromino-like shapes, and trap the other side.',
   moveStyle: 'fire-and-forget',
   moveType: 'BLOCK_MOVE',

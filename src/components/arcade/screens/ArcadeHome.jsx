@@ -44,34 +44,8 @@ export default function ArcadeHome({
 
       <section className="panel section-intro">
         <p className="eyebrow">Arcade</p>
-        <h2>Pick a game and start a private XMTP match.</h2>
-        <p className="muted">
-          This arcade flow is fully offchain. Setup, invitation, gameplay, and
-          results all happen through direct XMTP messages.
-        </p>
+        <h2>Pick a game</h2>
       </section>
-
-      <div className="panel-grid arcade-status-grid">
-        <div className="panel summary-card">
-          <p className="eyebrow">Wallet</p>
-          <h2>{connected ? "Connected" : "Not connected"}</h2>
-          <p className="muted">
-            {connected
-              ? "Wallet is ready for arcade sessions."
-              : "Connect your wallet first."}
-          </p>
-        </div>
-
-        <div className="panel summary-card">
-          <p className="eyebrow">XMTP</p>
-          <h2>{hasXmtp ? "Ready" : "Inbox required"}</h2>
-          <p className="muted">
-            {hasXmtp
-              ? "Your XMTP inbox is ready to send game messages."
-              : "Create or connect your XMTP inbox before playing."}
-          </p>
-        </div>
-      </div>
 
       <GamePicker
         games={games}

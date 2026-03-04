@@ -626,6 +626,156 @@ body {
   background: #999;
 }
 
+/* Arcade Event Messages (Chatting Room) */
+.arcade-event {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  margin: 0.25rem auto;
+  max-width: 85%;
+}
+
+.arcade-event-text {
+  font-size: 0.75rem;
+  color: #888;
+  font-style: italic;
+}
+
+.arcade-event-time {
+  font-size: 0.65rem;
+  color: #aaa;
+  white-space: nowrap;
+}
+
+/* Invite Card (Chatting Room) */
+.invite-card {
+  background: #f0f8ff;
+  border: 1px solid #b3d4fc;
+  border-radius: 12px;
+  padding: 0.75rem;
+  max-width: 70%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.invite-card-header {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #1565c0;
+  letter-spacing: 0.05em;
+}
+
+.invite-card-game {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #333;
+}
+
+.invite-card-from {
+  font-size: 0.75rem;
+  color: #666;
+}
+
+.invite-card-btn {
+  margin-top: 0.35rem;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.8rem;
+  background: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.invite-card-btn:hover {
+  background: #45a049;
+}
+
+/* Share Invite Banner */
+.share-invite-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  background: #e8f5e9;
+  border-bottom: 1px solid #c8e6c9;
+  font-size: 0.85rem;
+  color: #2e7d32;
+}
+
+.share-invite-banner .primary-btn {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  background: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.share-invite-banner .primary-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.chatroom-invite-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  margin: 0.5rem 0.75rem;
+  background: #e3f2fd;
+  border: 1px solid #90caf9;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  color: #1565c0;
+}
+
+.chatroom-invite-banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.chatroom-invite-banner-hint {
+  font-size: 0.75rem;
+  color: #42a5f5;
+}
+
+.chatroom-invite-banner .primary-btn {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  background: #1976d2;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+/* Lobby styles */
+.lobby-item {
+  border-left: 3px solid #1976d2;
+}
+
+.lobby-avatar {
+  background: #1976d2 !important;
+  color: white !important;
+}
+
+.invite-card-expired {
+  opacity: 0.5;
+  border-color: #ccc;
+}
+
 /* Bottom Tabs */
 .bottom-tabs {
   display: flex;
@@ -1504,6 +1654,26 @@ body {
     box-shadow 140ms ease;
 }
 
+.arcade-page .game-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.arcade-page .game-card-icon {
+  font-size: 2.5rem;
+  flex-shrink: 0;
+}
+
+.arcade-page .game-card-info h3 {
+  margin: 0 0 0.15rem 0;
+}
+
+.arcade-page .game-card-info .muted {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
 .arcade-page .game-card:hover,
 .arcade-page .piece-card:hover,
 .arcade-page .primary-btn:hover,
@@ -1540,6 +1710,56 @@ body {
 
 .arcade-page .check-list li {
   line-height: 1.4;
+}
+
+.arcade-page .debug-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.arcade-page .debug-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: start;
+  padding-top: 0.7rem;
+  border-top: 1px solid rgba(17, 82, 63, 0.08);
+}
+
+.arcade-page .debug-item:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.arcade-page .debug-time,
+.arcade-page .debug-details {
+  font-family: "SFMono-Regular", "Menlo", monospace;
+  font-size: 0.76rem;
+}
+
+.arcade-page .debug-time {
+  color: var(--arcade-muted);
+  white-space: nowrap;
+}
+
+.arcade-page .debug-copy {
+  min-width: 0;
+}
+
+.arcade-page .debug-label {
+  font-size: 0.9rem;
+  line-height: 1.35;
+  color: var(--arcade-ink);
+}
+
+.arcade-page .debug-details {
+  margin-top: 0.2rem;
+  color: var(--arcade-muted);
+  overflow-wrap: anywhere;
 }
 
 .arcade-page .value-block {
@@ -1754,16 +1974,11 @@ body {
 }
 
 .arcade-page .ship-setup-footer {
-  position: sticky;
-  bottom: 0.75rem;
-  z-index: 4;
+  position: static;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  background: rgba(255, 255, 255, 0.98);
-  backdrop-filter: blur(10px);
-  border-color: var(--arcade-border-strong);
   box-shadow: 0 18px 36px rgba(17, 48, 37, 0.12);
 }
 

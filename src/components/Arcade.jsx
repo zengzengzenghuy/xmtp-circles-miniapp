@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ConsentState } from "@xmtp/browser-sdk";
 import { GAMES, getGameDefinition } from "./arcade/gameRegistry.js";
 import { buildGenericCommitment } from "./arcade/protocol/commitment.js";
+import { makeEnvelope } from "./arcade/protocol/envelope.js";
 import {
   applyLocalMove,
   buildResignResult,
@@ -17,6 +19,7 @@ import {
   createInvitePayload,
 } from "./arcade/helpers/invite.js";
 import {
+  LIFECYCLE_TYPES,
   PHASE,
   PAYMENT_WATCH_STATUS,
   SESSION_STATUS,
@@ -44,8 +47,30 @@ function buildCurrentInviteUrl(baseUrl, payload) {
   return buildInviteLink(baseUrl || window.location.href, payload);
 }
 
+function makeJoinRejectedMessage(gameDef, sessionId, from, payload) {
+  return makeEnvelope({
+    gameKey: gameDef.key,
+    sessionId,
+    from,
+    type: LIFECYCLE_TYPES.SESSION_JOIN_REJECTED,
+    payload,
+  });
+}
+
 function safeLower(value) {
   return String(value || "").toLowerCase();
+}
+
+function createDebugEvent(role, label, details = {}) {
+  return {
+    id: crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    at: Date.now(),
+    role,
+    label,
+    details,
+  };
 }
 
 function formatSummaryLabel(value) {
@@ -60,6 +85,31 @@ function getBillingFromInvite(invite) {
   return { mode: "free" };
 }
 
+function getCreatorInviteStatus(localState) {
+  if (
+    localState.phase === PHASE.RESULT ||
+    localState.session.status === SESSION_STATUS.RESULT
+  ) {
+    return { status: "terminated", reason: "session_result" };
+  }
+
+  if (localState.session.status === SESSION_STATUS.WAITING_FOR_JOIN) {
+    return { status: "available", reason: "waiting_for_join" };
+  }
+
+  if (localState.session.joinerAddress) {
+    return {
+      status: "used",
+      reason:
+        localState.session.status === SESSION_STATUS.ACTIVE
+          ? "session_active"
+          : "already_joined",
+    };
+  }
+
+  return { status: "used", reason: "already_joined" };
+}
+
 export default function Arcade({
   address,
   connected,
@@ -67,6 +117,7 @@ export default function Arcade({
   onOpenAccount,
   initialInvite,
   isMiniapp,
+  onInviteLinkChange,
 }) {
   const { state, actions } = useArcadeState({ address });
   const transport = useArcadeTransport({ xmtpClient, address });
@@ -76,7 +127,12 @@ export default function Arcade({
   const [conflictingInvite, setConflictingInvite] = useState(null);
   const [isResigning, setIsResigning] = useState(false);
   const stateRef = useRef(state);
-  const streamCleanupRef = useRef(null);
+  const sessionStreamCleanupRef = useRef(null);
+
+  // Notify parent when invite link changes (for Chatting Room sharing)
+  useEffect(() => {
+    onInviteLinkChange?.(inviteLink);
+  }, [inviteLink, onInviteLinkChange]);
 
   const hasXmtp = Boolean(xmtpClient);
   const selectedGame = useMemo(
@@ -137,7 +193,6 @@ export default function Arcade({
       statusLabel: formatSummaryLabel(state.recovery.snapshot.session?.status),
     };
   }, [state.recovery.available, state.recovery.snapshot]);
-
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
@@ -172,6 +227,7 @@ export default function Arcade({
 
       actions.setSetupState(game.createInitialSetupState());
       actions.setGameState(game.createInitialState());
+      actions.clearInviteStatus();
       actions.setInfo("");
       actions.setError("");
       setInviteLink("");
@@ -195,6 +251,7 @@ export default function Arcade({
 
       actions.setSetupState(game.createInitialSetupState());
       actions.setGameState(game.createInitialState());
+      actions.clearInviteStatus();
       actions.clearPayment();
       actions.startPaymentSelect({
         actor,
@@ -225,19 +282,31 @@ export default function Arcade({
     [actions, address],
   );
 
-  const clearStream = useCallback(async () => {
-    if (streamCleanupRef.current) {
-      await streamCleanupRef.current();
-      streamCleanupRef.current = null;
+  const clearSessionStream = useCallback(async () => {
+    if (sessionStreamCleanupRef.current) {
+      await sessionStreamCleanupRef.current();
+      sessionStreamCleanupRef.current = null;
     }
   }, []);
 
+  const clearStreams = useCallback(async () => {
+    await clearSessionStream();
+    await transport.stopWaitingStream();
+  }, [clearSessionStream, transport]);
+
+  const pushDebugEvent = useCallback(
+    (role, label, details = {}) => {
+      actions.pushDebugEvent(createDebugEvent(role, label, details));
+    },
+    [actions],
+  );
+
   useEffect(() => {
-    void clearStream();
+    void clearStreams();
     return () => {
-      void clearStream();
+      void clearStreams();
     };
-  }, [clearStream]);
+  }, [clearStreams]);
 
   useEffect(() => {
     if (!state.hydrated) {
@@ -301,6 +370,7 @@ export default function Arcade({
       creatorAddress: state.session.creatorAddress,
       creatorCommitment: state.session.creatorCommitment,
       publicConfig: state.session.publicConfig,
+      createdAt: state.session.publicConfig?.inviteMeta?.createdAt,
     });
     setInviteLink(buildCurrentInviteUrl(arcadeConfig.inviteBaseUrl, invitePayload));
   }, [
@@ -345,10 +415,17 @@ export default function Arcade({
   ]);
 
   const connectAndReplay = useCallback(
-    async (peerAddress, sessionId, gameKey, onMessage) => {
+    async (peerAddress, sessionId, gameKey, onMessage, existingConversationId) => {
       transport.resetSessionCache();
-      await transport.connectToPeer(peerAddress);
-      streamCleanupRef.current = await transport.startSessionStream({
+      await clearSessionStream();
+      let conversation = null;
+      if (existingConversationId) {
+        conversation = await transport.bindConversation(existingConversationId);
+      }
+      if (!conversation) {
+        conversation = await transport.connectToPeer(peerAddress);
+      }
+      sessionStreamCleanupRef.current = await transport.startSessionStream({
         sessionId,
         gameKey,
         onMessage,
@@ -357,11 +434,12 @@ export default function Arcade({
         sessionId,
         gameKey,
       });
-      for (const message of history) {
-        await onMessage(message);
+      for (const entry of history) {
+        await onMessage(entry.message, entry.incoming);
       }
+      return conversation?.id || existingConversationId || "";
     },
-    [transport],
+    [clearSessionStream, transport],
   );
 
   const applyProtocolResult = useCallback(
@@ -372,7 +450,7 @@ export default function Arcade({
   );
 
   const onArcadeMessage = useCallback(
-    async (message) => {
+    async (message, incoming) => {
       const localState = stateRef.current;
       const game = getGameDefinition(localState.selectedGameKey);
       if (!game) {
@@ -387,16 +465,149 @@ export default function Arcade({
         return;
       }
 
+      if (message.type === LIFECYCLE_TYPES.SESSION_JOIN_REJECTED) {
+        if (localState.session.role !== "joiner") {
+          return;
+        }
+        pushDebugEvent("joiner", "joiner_received_rejection", {
+          sessionId: message.sessionId,
+          gameKey: game.key,
+          from: message.from,
+          conversationId: incoming?.conversationId || "",
+          reason: message.payload.reason || "",
+          status: message.payload.status || "",
+        });
+        actions.setInviteStatus({
+          state: "expired",
+          reason: message.payload.reason || "",
+        });
+        actions.setInfo(
+          message.payload.status === "terminated"
+            ? "This session has already ended."
+            : "This session has already been claimed by another player.",
+        );
+        return;
+      }
+
       if (message.type === "SESSION_JOIN") {
-        if (
-          localState.session.role !== "creator" ||
-          localState.session.status !== SESSION_STATUS.WAITING_FOR_JOIN
-        ) {
+        if (localState.session.role !== "creator") {
           return;
         }
 
+        console.log("[arcade] creator received join", {
+          sessionId: message.sessionId,
+          from: message.from,
+          conversationId: incoming?.conversationId,
+          messageId: incoming?.id || incoming?.messageId,
+        });
+        pushDebugEvent("creator", "creator_received_join", {
+          sessionId: message.sessionId,
+          gameKey: game.key,
+          from: message.from,
+          conversationId: incoming?.conversationId || "",
+          messageId: incoming?.id || incoming?.messageId || "",
+        });
+
+        const inviteStatus = getCreatorInviteStatus(localState);
+        if (inviteStatus.status !== "available") {
+          console.log("[arcade] creator rejected join", {
+            sessionId: message.sessionId,
+            from: message.from,
+            status: inviteStatus.status,
+            reason: inviteStatus.reason,
+          });
+          pushDebugEvent("creator", "creator_rejected_join", {
+            sessionId: message.sessionId,
+            gameKey: game.key,
+            from: message.from,
+            status: inviteStatus.status,
+            reason: inviteStatus.reason,
+          });
+          const rejection = makeJoinRejectedMessage(
+            game,
+            localState.session.sessionId,
+            localState.address,
+            inviteStatus,
+          );
+          let rejectionConversation = incoming?.conversation || null;
+          if (incoming?.conversationId) {
+            rejectionConversation =
+              (await transport.bindConversation(incoming.conversationId)) ||
+              rejectionConversation;
+          }
+          if (!rejectionConversation) {
+            rejectionConversation =
+              await transport.resolveExistingSessionConversation({
+                peerAddress: message.from,
+                sessionId: localState.session.sessionId,
+                gameKey: game.key,
+              });
+          }
+          if (!rejectionConversation) {
+            pushDebugEvent("creator", "creator_rejection_conversation_missing", {
+              sessionId: message.sessionId,
+              gameKey: game.key,
+              from: message.from,
+            });
+            actions.setInfo("Failed to resolve the join conversation for rejection.");
+            return;
+          }
+          await transport.sendEnvelopeToConversation(
+            rejectionConversation,
+            rejection,
+          );
+          try {
+            await rejectionConversation.updateConsentState(ConsentState.Denied);
+          } catch (error) {
+            console.warn("Arcade failed to deny rejected session conversation", error);
+          }
+          return;
+        }
+
+        console.log("[arcade] creator accepted join", {
+          sessionId: message.sessionId,
+          from: message.from,
+          conversationId: incoming?.conversationId,
+        });
+        pushDebugEvent("creator", "creator_accepted_join", {
+          sessionId: message.sessionId,
+          gameKey: game.key,
+          from: message.from,
+          conversationId: incoming?.conversationId || "",
+        });
         const opponentAddress = message.from;
-        await transport.connectToPeer(opponentAddress);
+        let boundConversation = incoming?.conversation || null;
+        if (incoming?.conversationId) {
+          boundConversation =
+            (await transport.bindConversation(incoming.conversationId)) ||
+            boundConversation;
+        }
+        if (!boundConversation) {
+          boundConversation =
+            await transport.resolveExistingSessionConversation({
+              peerAddress: opponentAddress,
+              sessionId: localState.session.sessionId,
+              gameKey: game.key,
+            });
+        }
+        if (!boundConversation) {
+          pushDebugEvent("creator", "creator_accept_conversation_missing", {
+            sessionId: message.sessionId,
+            gameKey: game.key,
+            from: message.from,
+          });
+          actions.setError(
+            "Join was received, but the session conversation could not be resolved.",
+          );
+          return;
+        }
+        try {
+          await boundConversation.updateConsentState(ConsentState.Allowed);
+        } catch (error) {
+          console.warn("Arcade failed to allow accepted session conversation", error);
+        }
+        await transport.stopWaitingStream();
+        await clearSessionStream();
         actions.activateSession({
           session: {
             role: "creator",
@@ -406,23 +617,64 @@ export default function Arcade({
             selfReady: true,
             opponentReady: true,
             turn: "creator",
+            conversationId: boundConversation?.id || incoming?.conversationId || "",
           },
           info: "Opponent joined. Session is live.",
         });
-        await transport.sendEnvelope(
-          makeReadyMessage(game, localState.session.sessionId, localState.address),
+        const readyMessage = makeReadyMessage(
+          game,
+          localState.session.sessionId,
+          localState.address,
         );
+        console.log("[arcade] creator sending ready", {
+          sessionId: localState.session.sessionId,
+          to: opponentAddress,
+          conversationId:
+            boundConversation?.id || incoming?.conversationId || null,
+        });
+        pushDebugEvent("creator", "creator_sending_ready", {
+          sessionId: localState.session.sessionId,
+          gameKey: game.key,
+          to: opponentAddress,
+          conversationId: boundConversation.id,
+        });
+        await transport.sendEnvelopeToConversation(boundConversation, readyMessage);
+        sessionStreamCleanupRef.current = await transport.startSessionStream({
+          sessionId: localState.session.sessionId,
+          gameKey: game.key,
+          onMessage: async (nextMessage, nextIncoming) => {
+            await onArcadeMessage(nextMessage, nextIncoming);
+          },
+        });
         return;
       }
 
       if (message.type === "SESSION_READY") {
-        if (
-          localState.session.role !== "joiner" ||
-          localState.session.status !== SESSION_STATUS.WAITING_FOR_READY ||
-          safeLower(message.from) !== safeLower(localState.session.creatorAddress)
-        ) {
+        const readyEligible =
+          localState.session.role === "joiner" &&
+          safeLower(message.from) ===
+            safeLower(localState.session.creatorAddress) &&
+          (
+            localState.session.status === SESSION_STATUS.WAITING_FOR_READY ||
+            localState.session.status === SESSION_STATUS.DRAFT
+          );
+
+        if (!readyEligible) {
           return;
         }
+        console.log("[arcade] joiner received ready", {
+          sessionId: message.sessionId,
+          from: message.from,
+          conversationId: incoming?.conversationId,
+          messageId: incoming?.id || incoming?.messageId,
+        });
+        pushDebugEvent("joiner", "joiner_received_ready", {
+          sessionId: message.sessionId,
+          gameKey: game.key,
+          from: message.from,
+          conversationId: incoming?.conversationId || "",
+          messageId: incoming?.id || incoming?.messageId || "",
+        });
         actions.activateSession({
           session: {
             role: "joiner",
@@ -432,6 +684,10 @@ export default function Arcade({
             turn: "creator",
           },
           info: "Creator is ready. Your session is live.",
+        });
+        actions.setInviteStatus({
+          state: "expired",
+          reason: "already_joined",
         });
         return;
       }
@@ -480,91 +736,123 @@ export default function Arcade({
         }
       }
     },
-    [actions, applyProtocolResult, transport],
+    [actions, applyProtocolResult, clearSessionStream, pushDebugEvent, transport],
   );
 
   useEffect(() => {
-    if (!hasXmtp || !selectedGame) {
+    if (
+      !hasXmtp ||
+      !selectedGame ||
+      state.session.role !== "creator" ||
+      state.phase !== PHASE.CREATE_INVITE ||
+      state.session.status !== SESSION_STATUS.WAITING_FOR_JOIN ||
+      !state.session.sessionId
+    ) {
       return;
     }
 
-    if (
-      state.phase === PHASE.CREATE_INVITE &&
-      state.session.sessionId &&
-      state.session.status === SESSION_STATUS.WAITING_FOR_JOIN
-    ) {
-      let cancelled = false;
-      void (async () => {
-        try {
-          transport.resetSessionCache();
-          streamCleanupRef.current = await transport.startSessionStream({
-            sessionId: state.session.sessionId,
-            gameKey: selectedGame.key,
-            onMessage: async (message) => {
-              if (!cancelled) {
-                await onArcadeMessage(message);
-              }
-            },
-          });
-
-          const history = await transport.loadSessionMessages({
-            sessionId: state.session.sessionId,
-            gameKey: selectedGame.key,
-          });
-
-          for (const message of history) {
+    let cancelled = false;
+    void (async () => {
+      try {
+        pushDebugEvent("creator", "creator_wait_started", {
+          sessionId: state.session.sessionId,
+          gameKey: selectedGame.key,
+        });
+        await transport.stopWaitingStream();
+        await transport.startWaitingForJoin({
+          sessionId: state.session.sessionId,
+          gameKey: selectedGame.key,
+          onMessage: async (message, incoming) => {
             if (!cancelled) {
-              await onArcadeMessage(message);
+              await onArcadeMessage(message, incoming);
             }
-          }
-        } catch (error) {
+          },
+          onDebugEvent: (label, details) => {
+            if (!cancelled) {
+              pushDebugEvent("creator", label, details);
+            }
+          },
+        });
+      } catch (error) {
+        if (!cancelled) {
+          pushDebugEvent("transport", "creator_wait_failed", {
+            sessionId: state.session.sessionId,
+            gameKey: selectedGame.key,
+            reason: error.message || "Failed to listen for join messages",
+          });
           actions.setError(error.message || "Failed to listen for join messages");
         }
-      })();
+      }
+    })();
 
-      return () => {
-        cancelled = true;
-      };
+    return () => {
+      cancelled = true;
+      void transport.stopWaitingStream();
+    };
+  }, [
+    actions,
+    hasXmtp,
+    onArcadeMessage,
+    selectedGame,
+    state.phase,
+    state.session.role,
+    state.session.sessionId,
+    state.session.status,
+    pushDebugEvent,
+    transport,
+  ]);
+
+  useEffect(() => {
+    if (
+      !hasXmtp ||
+      !selectedGame ||
+      state.phase !== PHASE.PLAYING ||
+      state.session.status !== SESSION_STATUS.ACTIVE ||
+      !state.session.sessionId
+    ) {
+      return;
     }
 
-    if (
-      state.phase === PHASE.PLAYING &&
-      state.session.status === SESSION_STATUS.ACTIVE &&
-      state.session.sessionId
-    ) {
-      const peerAddress =
-        state.session.role === "creator"
-          ? state.session.joinerAddress
-          : state.session.creatorAddress;
+    const peerAddress =
+      state.session.role === "creator"
+        ? state.session.joinerAddress
+        : state.session.creatorAddress;
 
-      if (!peerAddress) {
-        return;
-      }
+    if (!peerAddress) {
+      return;
+    }
 
-      let cancelled = false;
-      void (async () => {
-        try {
-          await connectAndReplay(
-            peerAddress,
-            state.session.sessionId,
-            selectedGame.key,
-            async (message) => {
-              if (!cancelled) {
-                await onArcadeMessage(message);
-              }
-            },
-          );
-        } catch (error) {
+    let cancelled = false;
+    void (async () => {
+      try {
+        await connectAndReplay(
+          peerAddress,
+          state.session.sessionId,
+          selectedGame.key,
+          async (message, incoming) => {
+            if (!cancelled) {
+              await onArcadeMessage(message, incoming);
+            }
+          },
+          state.session.conversationId,
+        );
+      } catch (error) {
+        if (!cancelled) {
+          pushDebugEvent("transport", "session_stream_failed", {
+            sessionId: state.session.sessionId,
+            gameKey: selectedGame.key,
+            reason: error.message || "Failed to connect arcade session messages",
+          });
           actions.setError(
             error.message || "Failed to connect arcade session messages",
           );
         }
-      })();
+      }
+    })();
 
-      return () => {
-        cancelled = true;
-      };
-    }
+    return () => {
+      cancelled = true;
+    };
   }, [
     actions,
     connectAndReplay,
@@ -577,7 +865,7 @@ export default function Arcade({
     state.session.role,
     state.session.sessionId,
     state.session.status,
-    transport,
+    pushDebugEvent,
   ]);
 
   const handleSelectGame = useCallback(
@@ -758,8 +1046,12 @@ export default function Arcade({
       const built = buildGenericCommitment(
         selectedGame.serializeSecret(state.gameSetupState),
       );
+      const inviteCreatedAt =
+        state.session.publicConfig?.inviteMeta?.createdAt || Date.now();
 
       if (state.invite) {
+        actions.clearDebugEvents();
+        actions.setInviteStatus({ state: "idle", reason: "" });
         actions.setCommittedSetup({
           commitment: built.commitment,
           secretState: built.secretState,
@@ -775,8 +1067,14 @@ export default function Arcade({
             creatorCommitment: state.invite.creatorCommitment,
             joinerAddress: state.address,
             joinerCommitment: built.commitment,
-            publicConfig:
-              selectedGame.loadInvitePublicConfig(state.invite.publicConfig),
+            publicConfig: {
+              ...selectedGame.loadInvitePublicConfig(state.invite.publicConfig),
+              inviteMeta: {
+                createdAt:
+                  state.invite.publicConfig?.inviteMeta?.createdAt ||
+                  inviteCreatedAt,
+              },
+            },
             turn: "creator",
             mySeq: 1,
             expectedOpponentSeq: 1,
@@ -800,6 +1098,8 @@ export default function Arcade({
           : {
               mode: "free",
             };
+      actions.clearDebugEvents();
+      actions.clearInviteStatus();
       actions.setCommittedSetup({
         commitment: built.commitment,
         secretState: built.secretState,
@@ -815,6 +1115,9 @@ export default function Arcade({
           creatorCommitment: built.commitment,
           publicConfig: {
             ...built.publicConfig,
+            inviteMeta: {
+              createdAt: inviteCreatedAt,
+            },
             billing,
           },
           turn: "creator",
@@ -836,16 +1139,28 @@ export default function Arcade({
     state.invite,
     state.payment.amountCrc,
     state.payment.mode,
+    state.session.publicConfig,
     state.session.sessionId,
   ]);
 
   const handleJoinSession = useCallback(async () => {
-    if (!selectedGame || !state.invite || !hasXmtp || !connected) {
+    if (
+      !selectedGame ||
+      !state.invite ||
+      !hasXmtp ||
+      !connected ||
+      !state.session.sessionId
+    ) {
       return;
     }
 
     try {
-      await connectAndReplay(
+      pushDebugEvent("joiner", "joiner_clicked_join", {
+        sessionId: state.session.sessionId,
+        gameKey: selectedGame.key,
+        creatorAddress: state.invite.creatorAddress,
+      });
+      const conversationId = await connectAndReplay(
         state.invite.creatorAddress,
         state.session.sessionId,
         selectedGame.key,
@@ -858,16 +1173,41 @@ export default function Arcade({
         selfReady: true,
         joinerAddress: state.address,
         joinerCommitment: state.commitment,
+        conversationId,
       });
       actions.setPhase(PHASE.JOIN_INVITE);
       actions.setInfo("Waiting for the creator to confirm the session.");
+      stateRef.current = {
+        ...stateRef.current,
+        phase: PHASE.JOIN_INVITE,
+        info: "Waiting for the creator to confirm the session.",
+        session: {
+          ...stateRef.current.session,
+          status: SESSION_STATUS.WAITING_FOR_READY,
+          role: "joiner",
+          selfReady: true,
+          joinerAddress: state.address,
+          joinerCommitment: state.commitment,
+          conversationId,
+        },
+      };
 
       await transport.sendEnvelope(
         makeJoinMessage(selectedGame, state.session.sessionId, state.address, {
           commitment: state.commitment,
         }),
       );
+      pushDebugEvent("joiner", "joiner_join_sent", {
+        sessionId: state.session.sessionId,
+        gameKey: selectedGame.key,
+        creatorAddress: state.invite.creatorAddress,
+      });
     } catch (error) {
+      pushDebugEvent("joiner", "join_failed", {
+        sessionId: state.session.sessionId,
+        gameKey: selectedGame.key,
+        reason: error.message || "Failed to join arcade session",
+      });
       actions.setError(error.message || "Failed to join arcade session");
     }
   }, [
@@ -881,6 +1221,7 @@ export default function Arcade({
     state.commitment,
     state.invite,
     state.session.sessionId,
+    pushDebugEvent,
     transport,
   ]);
 
@@ -1003,14 +1344,14 @@ export default function Arcade({
   ]);
 
   const handleResetArcade = useCallback(async () => {
-    await clearStream();
+    await clearStreams();
     transport.resetSessionCache();
     setPendingInvite(null);
     setConflictingInvite(null);
     setInviteLink("");
     setIsResigning(false);
     actions.resetSession();
-  }, [actions, clearStream, transport]);
+  }, [actions, clearStreams, transport]);
 
   const handleResumeRecovery = useCallback(() => {
     setPendingInvite(null);
@@ -1020,14 +1361,14 @@ export default function Arcade({
 
   const handleDiscardAndOpenInvite = useCallback(async () => {
     const inviteToOpen = conflictingInvite;
-    await clearStream();
+    await clearStreams();
     transport.resetSessionCache();
     setConflictingInvite(null);
     setInviteLink("");
     setIsResigning(false);
     actions.resetSession();
     setPendingInvite(inviteToOpen);
-  }, [actions, clearStream, conflictingInvite, transport]);
+  }, [actions, clearStreams, conflictingInvite, transport]);
 
   const handlePlayAgain = useCallback(() => {
     if (!selectedGame) {
@@ -1131,6 +1472,7 @@ export default function Arcade({
           session={state.session}
           summary={selectedGame?.getSetupSummary(state.secretState) || []}
           inviteLink={inviteLink}
+          debugEvents={state.debugEvents}
           info={state.info}
           onReset={actions.resetSession}
         />
@@ -1141,9 +1483,17 @@ export default function Arcade({
           invite={state.invite}
           selectedGame={selectedGame}
           summary={selectedGame?.getSetupSummary(state.secretState) || []}
-          canJoin={connected && hasXmtp}
+          canJoin={
+            connected &&
+            hasXmtp &&
+            state.inviteStatus.state !== "expired"
+          }
+          debugEvents={state.debugEvents}
+          needsAccountSetup={!connected || !hasXmtp}
+          inviteStatus={state.inviteStatus}
           info={state.info}
           onJoin={handleJoinSession}
+          onResetArcade={handleResetArcade}
           onOpenAccount={onOpenAccount}
         />
       );

@@ -16,18 +16,6 @@ export default function ShipPlacer({
 
   return (
     <div className="ship-placer">
-      <div className="panel ship-toolbar">
-        <div className="ship-toolbar-copy">
-          <p className="eyebrow">Board setup</p>
-          <h2>{nextShip ? `Place ${nextShip.name}` : 'Fleet ready'}</h2>
-          <p className="muted">
-            {nextShip
-              ? `Length ${nextShip.length}. Tap a square to place it.`
-              : 'All ships placed. Continue when you are ready.'}
-          </p>
-        </div>
-      </div>
-
       <div className="battleship-setup-board-wrap">
         <Board
           board={board}
@@ -38,40 +26,36 @@ export default function ShipPlacer({
         />
       </div>
 
-      <div className="panel ship-setup-footer">
-        <div className="ship-setup-footer-main">
-          <div className="ship-toolbar-copy">
-            <p className="eyebrow">Setup status</p>
-            <h3>{nextShip ? `Place ${nextShip.name}` : 'Fleet ready'}</h3>
-            <p className="muted">
-              {nextShip
-                ? `Length ${nextShip.length} · Placing ${placedShipsCount + 1} of ${totalShipsCount}`
-                : `All ${totalShipsCount} ships placed. Commit when ready.`}
-            </p>
-          </div>
-
-          <div className="ship-progress-inline">
-            <span className={`ship-pill ${nextShip ? 'active' : 'ready'}`}>
-              {nextShip ? `${remainingShips.length} ships left` : 'Fleet ready'}
-            </span>
-            {remainingShips
-              .filter((ship) => ship !== nextShip)
-              .map((ship) => (
-                <span key={ship.id} className="ship-pill">
-                  {ship.name}
-                </span>
-              ))}
-          </div>
+      <div className="panel">
+        <p className="eyebrow">
+          {nextShip ? `Place ${nextShip.name}` : 'Fleet ready'}
+        </p>
+        <p className="muted">
+          {nextShip
+            ? `Length ${nextShip.length} · Placing ${placedShipsCount + 1} of ${totalShipsCount}`
+            : `All ${totalShipsCount} ships placed. Commit when ready.`}
+        </p>
+        <div className="ship-progress-inline" style={{ marginTop: '0.5rem' }}>
+          <span className={`ship-pill ${nextShip ? 'active' : 'ready'}`}>
+            {nextShip ? `${remainingShips.length} ships left` : 'Fleet ready'}
+          </span>
+          {remainingShips
+            .filter((ship) => ship !== nextShip)
+            .map((ship) => (
+              <span key={ship.id} className="ship-pill">
+                {ship.name}
+              </span>
+            ))}
         </div>
+      </div>
 
-        <div className="ship-setup-footer-actions">
-          <button type="button" className="secondary-btn" onClick={onRotate}>
-            Rotate: {orientation}
-          </button>
-          <button type="button" className="ghost-btn" onClick={onReset}>
-            Reset board
-          </button>
-        </div>
+      <div className="action-stack" style={{ flexDirection: 'row', gap: '0.5rem' }}>
+        <button type="button" className="secondary-btn" onClick={onRotate}>
+          Rotate: {orientation}
+        </button>
+        <button type="button" className="ghost-btn" onClick={onReset}>
+          Reset board
+        </button>
       </div>
     </div>
   );

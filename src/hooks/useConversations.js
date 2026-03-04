@@ -142,6 +142,10 @@ export const useConversations = (client) => {
     if (!client) return () => {};
 
     const onValue = (conversation) => {
+      // Skip arcade groups — they are managed by the arcade transport / chatting room
+      if (conversation.name === "arcade-session") return;
+      if (conversation.name === "arcade-lobby") return;
+
       const shouldAdd =
         conversation.metadata?.conversationType === ConversationType.Dm ||
         conversation.metadata?.conversationType === ConversationType.Group;
@@ -163,7 +167,18 @@ export const useConversations = (client) => {
     if (!client) return () => {};
 
     const onValue = (message) => {
-      // Filter out non-text messages if needed
+      // Skip arcade protocol messages — they belong to the arcade transport
+      try {
+        const text =
+          typeof message.content === "string"
+            ? message.content
+            : message.content instanceof Uint8Array
+              ? new TextDecoder().decode(message.content)
+              : null;
+        if (text && text.startsWith('{"version":"arcade/v1"')) return;
+      } catch {
+        // not text content, continue
+      }
       void addMessage(message.conversationId, message);
     };
 

@@ -1,8 +1,26 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useAccount } from "wagmi";
 import { useConversation } from "../hooks/useConversation";
+import { parseInviteFromSearch, isInviteExpired } from "./arcade/helpers/invite.js";
+import { getGameDefinition } from "./arcade/gameRegistry.js";
 
-function MessageArea({ conversation, xmtpClient, onBack, className }) {
+function formatAddr(addr) {
+  if (!addr) return "Unknown";
+  return `${String(addr).slice(0, 6)}...${String(addr).slice(-4)}`;
+}
+
+function tryParseInviteFromText(text) {
+  if (!text || !text.includes("arcadeInvite=")) return null;
+  try {
+    const url = new URL(text.trim());
+    const result = parseInviteFromSearch(url.search);
+    return result.invite;
+  } catch {
+    return null;
+  }
+}
+
+function MessageArea({ conversation, xmtpClient, onBack, onJoinInvite, className }) {
   const { address } = useAccount();
   const [inputValue, setInputValue] = useState("");
 
@@ -148,6 +166,44 @@ function MessageArea({ conversation, xmtpClient, onBack, className }) {
                 }
               } else {
                 messageText = JSON.stringify(message.content);
+              }
+
+              // Detect arcade invite links and render as clickable cards
+              const inviteParsed = tryParseInviteFromText(messageText);
+              if (inviteParsed) {
+                const expired = isInviteExpired(inviteParsed);
+                const gameDef = getGameDefinition(inviteParsed.gameKey);
+                return (
+                  <div
+                    key={message.id}
+                    className={`message ${isSent ? "sent" : "received"}`}>
+                    <div className={`invite-card${expired ? " invite-card-expired" : ""}`}>
+                      <div className="invite-card-header">
+                        {expired ? "Invite Expired" : "Arcade Invite"}
+                      </div>
+                      <div className="invite-card-game">
+                        {gameDef?.label || inviteParsed.gameKey}
+                      </div>
+                      <div className="invite-card-from">
+                        From: {formatAddr(inviteParsed.creatorAddress)}
+                      </div>
+                      {!isSent && !expired && onJoinInvite && (
+                        <button
+                          className="primary-btn invite-card-btn"
+                          onClick={() => onJoinInvite(inviteParsed)}
+                        >
+                          Join Game
+                        </button>
+                      )}
+                      <div className="message-timestamp">
+                        {timestamp.toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                );
               }
 
               return (

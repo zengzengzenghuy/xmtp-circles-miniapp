@@ -210,6 +210,12 @@ export function verifyRevealedGame({
       expectedWinner = 'joiner';
     } else if (!joinerCanMove && creatorCanMove) {
       expectedWinner = 'creator';
+    } else if (!creatorCanMove && !joinerCanMove) {
+      // Both stuck: the player whose turn it is next loses — they can't move.
+      // Last player to place wins (the other player's turn comes next).
+      if (placements.length > 0) {
+        expectedWinner = placements[placements.length - 1].player;
+      }
     }
   }
 

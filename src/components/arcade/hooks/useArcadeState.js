@@ -27,6 +27,7 @@ function createInitialSession(gameKey = "") {
     creatorCommitment: EMPTY_COMMITMENT,
     joinerAddress: "",
     joinerCommitment: EMPTY_COMMITMENT,
+    conversationId: "",
     publicConfig: {},
     turn: "creator",
     mySeq: 1,
@@ -59,6 +60,13 @@ function createInitialPayment() {
   };
 }
 
+function createInitialInviteStatus() {
+  return {
+    state: "idle",
+    reason: "",
+  };
+}
+
 export function createInitialArcadeState() {
   return {
     hydrated: false,
@@ -67,6 +75,7 @@ export function createInitialArcadeState() {
     selectedGameKey: "",
     invite: null,
     session: createInitialSession(),
+    inviteStatus: createInitialInviteStatus(),
     gameSetupState: null,
     gameState: null,
     secretState: null,
@@ -74,6 +83,7 @@ export function createInitialArcadeState() {
     payment: createInitialPayment(),
     info: "",
     error: "",
+    debugEvents: [],
     recovery: createInitialRecovery(),
     verification: {
       canConfirm: false,
@@ -277,6 +287,19 @@ export function arcadeStateReducer(state, action) {
         ...state,
         invite: action.invite,
       };
+    case "SET_INVITE_STATUS":
+      return {
+        ...state,
+        inviteStatus: {
+          ...state.inviteStatus,
+          ...action.inviteStatus,
+        },
+      };
+    case "CLEAR_INVITE_STATUS":
+      return {
+        ...state,
+        inviteStatus: createInitialInviteStatus(),
+      };
     case "SET_PHASE":
       return {
         ...state,
@@ -306,6 +329,16 @@ export function arcadeStateReducer(state, action) {
       return {
         ...state,
         info: action.info || "",
+      };
+    case "PUSH_DEBUG_EVENT":
+      return {
+        ...state,
+        debugEvents: [action.event, ...state.debugEvents].slice(0, 20),
+      };
+    case "CLEAR_DEBUG_EVENTS":
+      return {
+        ...state,
+        debugEvents: [],
       };
     case "SET_VERIFICATION":
       return {
@@ -548,6 +581,9 @@ export function useArcadeState({ address }) {
       selectGame: (gameKey) => dispatch({ type: "SELECT_GAME", gameKey }),
       startInvite: (invite) => dispatch({ type: "START_INVITE", invite }),
       setInvite: (invite) => dispatch({ type: "SET_INVITE", invite }),
+      setInviteStatus: (inviteStatus) =>
+        dispatch({ type: "SET_INVITE_STATUS", inviteStatus }),
+      clearInviteStatus: () => dispatch({ type: "CLEAR_INVITE_STATUS" }),
       setPhase: (phase) => dispatch({ type: "SET_PHASE", phase }),
       setSetupState: (gameSetupState) =>
         dispatch({ type: "SET_SETUP_STATE", gameSetupState }),
@@ -556,6 +592,8 @@ export function useArcadeState({ address }) {
       setError: (error) => dispatch({ type: "SET_ERROR", error }),
       setPayment: (payment) => dispatch({ type: "SET_PAYMENT", payment }),
       setInfo: (info) => dispatch({ type: "SET_INFO", info }),
+      pushDebugEvent: (event) => dispatch({ type: "PUSH_DEBUG_EVENT", event }),
+      clearDebugEvents: () => dispatch({ type: "CLEAR_DEBUG_EVENTS" }),
       setVerification: (verification) =>
         dispatch({ type: "SET_VERIFICATION", verification }),
       setCommittedSetup: (payload) =>

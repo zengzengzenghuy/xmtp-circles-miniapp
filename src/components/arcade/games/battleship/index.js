@@ -56,6 +56,8 @@ function buildRevealState(gameState, secretState, opponentReveal, match, role) {
 export const gameDefinition = {
   key: GAME_KEYS.BATTLESHIP,
   label: 'Battleship',
+  icon: '\u{1F6A2}',
+  shortDescription: 'Hide your fleet and fire shots',
   description: 'Place a hidden fleet, trade shots over XMTP, and reveal both boards at the end.',
   moveStyle: 'request-response',
   moveType: 'BATTLESHIP_SHOT',

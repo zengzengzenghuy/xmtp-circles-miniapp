@@ -9,8 +9,9 @@ export function createInvitePayload({
   creatorAddress,
   creatorCommitment,
   publicConfig = {},
-  createdAt = Date.now(),
+  createdAt,
 }) {
+  const now = Number(createdAt || Date.now());
   return {
     version: ARCADE_PROTOCOL_VERSION,
     sessionId: String(sessionId),
@@ -18,7 +19,8 @@ export function createInvitePayload({
     creatorAddress: String(creatorAddress),
     creatorCommitment: String(creatorCommitment),
     publicConfig,
-    createdAt,
+    createdAt: now,
+    expiresAt: now + 30 * 60 * 1000, // 30 minutes
   };
 }
 
@@ -57,6 +59,11 @@ export function decodeInvitePayload(raw) {
       error: `Invalid invite payload: ${error.message}`,
     };
   }
+}
+
+export function isInviteExpired(invite) {
+  if (!invite?.expiresAt) return false; // old invites without expiresAt stay valid
+  return Date.now() > invite.expiresAt;
 }
 
 export function parseInviteFromSearch(search) {
@@ -103,6 +110,8 @@ export function validateInvitePayload(payload) {
   if (!Number.isFinite(invite.createdAt) || invite.createdAt <= 0) {
     return { invite: null, error: "Invite createdAt must be a timestamp" };
   }
+
+  invite.expiresAt = Number(payload.expiresAt || 0);
 
   return { invite, error: "" };
 }

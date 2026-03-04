@@ -35,7 +35,6 @@ jobs:
         env:
           NODE_ENV: production
           VITE_WALLETCONNECT_PROJECT_ID: ${{ secrets.VITE_WALLETCONNECT_PROJECT_ID }}
-          VITE_ARCADE_INVITE_BASE_URL: https://circles.gnosis.io/miniapps/xmtp-circles-demo
 
       - name: Setup Pages
         uses: actions/configure-pages@v4

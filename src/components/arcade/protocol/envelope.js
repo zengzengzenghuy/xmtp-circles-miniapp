@@ -26,6 +26,7 @@ export function isLifecycleMessage(type) {
   return (
     type === LIFECYCLE_TYPES.SESSION_JOIN ||
     type === LIFECYCLE_TYPES.SESSION_READY ||
+    type === LIFECYCLE_TYPES.SESSION_JOIN_REJECTED ||
     type.endsWith('_GAME_OVER') ||
     type.endsWith('_REVEAL')
   );

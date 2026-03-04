@@ -23,11 +23,11 @@ export default function GamePicker({ games, selectedGameKey, onSelectGame, varia
           className={`game-card ${selectedGameKey === game.key ? 'game-card-active' : ''}`}
           onClick={() => onSelectGame(game.key)}
         >
-          <div className="game-card-top">
-            <p className="eyebrow">Arcade game</p>
-            <h2>{game.label}</h2>
+          <div className="game-card-icon">{game.icon || '🎮'}</div>
+          <div className="game-card-info">
+            <h3>{game.label}</h3>
+            <p className="muted">{game.shortDescription || game.description}</p>
           </div>
-          <p className="muted">{game.description}</p>
         </button>
       ))}
     </div>

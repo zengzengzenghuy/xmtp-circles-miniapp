@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useAccount, useSignMessage } from "wagmi";
-import { Client, IdentifierKind, LogLevel } from "@xmtp/browser-sdk";
+import { Client, IdentifierKind, LogLevel, Opfs } from "@xmtp/browser-sdk";
 import ConversationList from "./components/ConversationList";
 import MessageArea from "./components/MessageArea";
 import BottomTabs from "./components/BottomTabs";
@@ -39,6 +39,8 @@ function App() {
   const [xmtpClient, setXmtpClient] = useState(null);
   const [isCreatingInbox, setIsCreatingInbox] = useState(false);
   const [inboxError, setInboxError] = useState(null);
+  const [arcadeInviteLink, setArcadeInviteLink] = useState("");
+  const [arcadeInviteFromChat, setArcadeInviteFromChat] = useState(null);
   const [circlesMode, setCirclesMode] = useState(() => {
     // Load circles mode from localStorage, default to true if not set
     const saved = localStorage.getItem("circles-mode");
@@ -172,6 +174,19 @@ function App() {
       } else {
         console.log("Creating new XMTP inbox...");
       }
+
+      // Clear all XMTP OPFS databases to start fresh (temporary debugging measure)
+      try {
+        const opfs = await Opfs.create();
+        await opfs.clearAll();
+        opfs.close();
+        console.log("XMTP OPFS databases cleared for fresh start");
+      } catch (error) {
+        console.warn("Failed to clear XMTP OPFS databases", error);
+      }
+
+      // Also clear stored inbox ID so we don't try to load a stale inbox
+      localStorage.removeItem(`xmtp-inbox-${activeAddress.toLowerCase()}`);
 
       const client = await Client.create(signer, {
         env: "dev",
@@ -323,6 +338,12 @@ function App() {
     }
   };
 
+  // Handle joining an arcade game from Chatting Room invite card
+  const handleJoinFromChattingRoom = useCallback((invite) => {
+    setArcadeInviteFromChat(invite);
+    setActiveTab("arcade");
+  }, []);
+
   // Format address for display
   const formatAddress = (addr) => {
     if (!addr) return "";
@@ -386,20 +407,27 @@ function App() {
                 conversation={selectedConversation}
                 xmtpClient={xmtpClient}
                 onBack={() => setSelectedConversation(null)}
+                onJoinInvite={handleJoinFromChattingRoom}
                 className={!selectedConversation ? "hidden-mobile" : ""}
               />
             </div>
           )
         ) : activeTab === "chatting-room" ? (
-          <ChattingRoom />
+          <ChattingRoom
+            xmtpClient={xmtpClient}
+            address={effectiveAddress}
+            inviteLink={arcadeInviteLink}
+            onJoinInvite={handleJoinFromChattingRoom}
+          />
         ) : activeTab === "arcade" ? (
           <Arcade
             address={effectiveAddress}
             connected={effectiveConnected}
             xmtpClient={xmtpClient}
             onOpenAccount={() => setActiveTab("account")}
-            initialInvite={initialArcadeInviteResult.invite}
+            initialInvite={arcadeInviteFromChat || initialArcadeInviteResult.invite}
             isMiniapp={isMiniapp}
+            onInviteLinkChange={setArcadeInviteLink}
           />
         ) : (
           <AccountPage
