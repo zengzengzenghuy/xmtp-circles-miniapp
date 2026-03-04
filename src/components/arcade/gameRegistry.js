@@ -1,5 +1,5 @@
-import { gameDefinition as battleship } from "./games/battleship/index.js";
-import { gameDefinition as blockClash } from "./games/block-clash/index.js";
+import { gameDefinition as battleship } from "./games/battleship/index.jsx";
+import { gameDefinition as blockClash } from "./games/block-clash/index.jsx";
 
 export const GAMES = [battleship, blockClash];
 

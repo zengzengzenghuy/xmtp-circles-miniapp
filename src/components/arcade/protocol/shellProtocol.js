@@ -6,6 +6,9 @@ function safeLower(value) {
   return String(value || '').toLowerCase();
 }
 
+const TERMINAL_BOARD_MISMATCH_ERROR =
+  "Winner does not match the terminal board state";
+
 export function makeJoinMessage(gameDef, sessionId, from, payload = {}) {
   return makeEnvelope({
     gameKey: gameDef.key,
@@ -83,8 +86,15 @@ export function handleIncomingMessage(gameDef, message, context) {
     const winner = message.payload.winner;
     const didOpponentResign = message.payload.reason === "resign";
     const outgoingMessages = [];
+    const shouldSendReveal =
+      Boolean(secretState) && !gameState?.reveal?.mine;
+    const existingWinner = gameState?.winner || "";
+    const hasConflictingWinner =
+      existingWinner &&
+      safeLower(existingWinner) !== safeLower(winner);
+    const resolvedWinner = hasConflictingWinner ? existingWinner : winner;
 
-    if (safeLower(winner) === safeLower(address)) {
+    if (shouldSendReveal) {
       outgoingMessages.push(
         makeEnvelope({
           gameKey: gameDef.key,
@@ -98,16 +108,40 @@ export function handleIncomingMessage(gameDef, message, context) {
     }
 
     if (message.payload.board || message.payload.salt || message.payload.selectedPieceIds) {
-      const verification = runVerification(gameDef, {
-        gameState, secretState, opponentReveal: message.payload, session, role,
-        declaredWinner: winner, address,
-      });
+      const nextGameState = {
+        ...gameState,
+        winner: resolvedWinner,
+        reveal: {
+          ...gameState.reveal,
+          mine: shouldSendReveal ? secretState : gameState?.reveal?.mine || null,
+          opponent: message.payload,
+        },
+      };
+      const verification =
+        hasConflictingWinner ||
+        !isBoardReadyForVerification(
+          gameDef,
+          nextGameState,
+          message.payload,
+          secretState,
+          role,
+        )
+          ? undefined
+          : runVerification(gameDef, {
+              gameState: nextGameState,
+              secretState,
+              opponentReveal: message.payload,
+              session,
+              role,
+              declaredWinner: resolvedWinner,
+              address,
+            });
       return {
-        gameState: { ...gameState, winner, reveal: { ...gameState.reveal, opponent: message.payload } },
-        winner,
+        gameState: nextGameState,
+        winner: hasConflictingWinner ? undefined : resolvedWinner,
         verification,
         info:
-          didOpponentResign && safeLower(winner) === safeLower(address)
+          didOpponentResign && safeLower(resolvedWinner) === safeLower(address)
             ? "Opponent resigned the session."
             : undefined,
         outgoingMessages: outgoingMessages.length > 0 ? outgoingMessages : undefined,
@@ -116,10 +150,18 @@ export function handleIncomingMessage(gameDef, message, context) {
     }
 
     return {
-      gameState: { ...gameState, winner },
-      winner,
+      gameState: {
+        ...gameState,
+        winner: resolvedWinner,
+        reveal: {
+          ...(gameState.reveal || {}),
+          mine: shouldSendReveal ? secretState : gameState?.reveal?.mine || null,
+        },
+      },
+      winner: hasConflictingWinner ? undefined : resolvedWinner,
+      verification: undefined,
       info:
-        didOpponentResign && safeLower(winner) === safeLower(address)
+        didOpponentResign && safeLower(resolvedWinner) === safeLower(address)
           ? "Opponent resigned the session."
           : undefined,
       outgoingMessages: outgoingMessages.length > 0 ? outgoingMessages : undefined,
@@ -128,15 +170,32 @@ export function handleIncomingMessage(gameDef, message, context) {
   }
 
   if (message.type === revealType(gameDef.key)) {
-    const verification = runVerification(gameDef, {
-      gameState, secretState, opponentReveal: message.payload, session, role,
-      declaredWinner: gameState.winner, address,
-    });
+    const nextGameState = {
+      ...gameState,
+      reveal: { ...gameState.reveal, opponent: message.payload },
+    };
+    const verification =
+      gameState?.winner &&
+      secretState &&
+      isBoardReadyForVerification(
+        gameDef,
+        nextGameState,
+        message.payload,
+        secretState,
+        role,
+      )
+        ? runVerification(gameDef, {
+            gameState: nextGameState,
+            secretState,
+            opponentReveal: message.payload,
+            session,
+            role,
+            declaredWinner: gameState.winner,
+            address,
+          })
+        : undefined;
     return {
-      gameState: {
-        ...gameState,
-        reveal: { ...gameState.reveal, opponent: message.payload },
-      },
+      gameState: nextGameState,
       verification,
     };
   }
@@ -191,11 +250,31 @@ export function handleIncomingMessage(gameDef, message, context) {
       );
     }
 
+    let verification;
+    const nextGameState = result.gameState || gameState;
+    const declaredWinner = nextGameState?.winner || gameState?.winner;
+    if (
+      nextGameState?.reveal?.opponent &&
+      declaredWinner &&
+      secretState
+    ) {
+      verification = runVerification(gameDef, {
+        gameState: nextGameState,
+        secretState,
+        opponentReveal: nextGameState.reveal.opponent,
+        session,
+        role,
+        declaredWinner,
+        address,
+      });
+    }
+
     return {
       gameState: result.gameState,
       outgoingMessages: outgoingMessages.length > 0 ? outgoingMessages : undefined,
       winner: result.winner || '',
       info: result.info || '',
+      verification,
       turnDelta: { turn: role },
       seqDelta: { expectedOpponentSeq: expectedOpponentSeq + 1 },
     };
@@ -373,6 +452,52 @@ function runVerification(gameDef, { gameState, secretState, opponentReveal, sess
     reason: ruleCheck.valid ? 'Game verified successfully.' : ruleCheck.error,
     details: [],
   };
+}
+
+function isBoardReadyForVerification(
+  gameDef,
+  gameState,
+  opponentReveal,
+  secretState,
+  role,
+) {
+  if (typeof gameDef.verifyGameRules !== "function") {
+    return true;
+  }
+  if (!gameState || !opponentReveal || !secretState) {
+    return false;
+  }
+
+  const otherRole = role === "creator" ? "joiner" : "creator";
+  try {
+    const firstCheck = gameDef.verifyGameRules({
+      mySecretState: secretState,
+      opponentReveal,
+      gameState,
+      role,
+      declaredWinner: role,
+    });
+    const secondCheck = gameDef.verifyGameRules({
+      mySecretState: secretState,
+      opponentReveal,
+      gameState,
+      role,
+      declaredWinner: otherRole,
+    });
+
+    if (
+      !firstCheck?.valid &&
+      !secondCheck?.valid &&
+      firstCheck?.error === TERMINAL_BOARD_MISMATCH_ERROR &&
+      secondCheck?.error === TERMINAL_BOARD_MISMATCH_ERROR
+    ) {
+      return false;
+    }
+  } catch {
+    return true;
+  }
+
+  return true;
 }
 
 function normalizeRevealSalt(salt) {

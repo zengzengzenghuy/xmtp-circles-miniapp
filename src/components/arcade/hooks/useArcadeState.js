@@ -437,18 +437,25 @@ export function arcadeStateReducer(state, action) {
             action.seqDelta.expectedOpponentSeq;
         }
       }
-      if (action.winner) {
+      if (action.winner && !state.session.winner) {
         nextSession.winner = action.winner;
         nextSession.status = SESSION_STATUS.RESULT;
       }
       return {
         ...state,
-        phase: action.winner ? PHASE.RESULT : state.phase,
+        phase:
+          action.winner && !state.session.winner
+            ? PHASE.RESULT
+            : state.phase,
         session: nextSession,
         gameState:
           action.gameState !== undefined ? action.gameState : state.gameState,
         verification: action.verification
-          ? { ...state.verification, ...action.verification }
+          ? (
+              state.verification.canConfirm
+                ? state.verification
+                : { ...state.verification, ...action.verification }
+            )
           : state.verification,
         info: action.info ?? state.info,
         error: action.error ?? state.error,

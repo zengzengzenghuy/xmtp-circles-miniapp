@@ -9,6 +9,7 @@ export default function PlaySession({
   info,
   onAction,
   onResign,
+  onResetArcade,
   isResigning = false,
 }) {
   if (!selectedGame) {
@@ -20,16 +21,6 @@ export default function PlaySession({
   return (
     <div className="arcade-stage">
       {info ? <div className="banner info">{info}</div> : null}
-      <div className="play-session-actions">
-        <button
-          type="button"
-          className="ghost-btn"
-          onClick={onResign}
-          disabled={isResigning}
-        >
-          {isResigning ? "Resigning..." : "Resign session"}
-        </button>
-      </div>
       <PlayScreen
         gameState={gameState}
         role={role}
@@ -37,6 +28,31 @@ export default function PlaySession({
         secretState={secretState}
         onAction={onAction}
       />
+      <div className="panel play-session-footer">
+        <div className="play-session-footer-copy">
+          <p className="eyebrow">Session actions</p>
+          <p className="muted">
+            Resign session ends the match and gives the opponent the win. Reset arcade just clears this local flow and returns home.
+          </p>
+        </div>
+        <div className="play-session-footer-actions">
+          <button
+            type="button"
+            className="primary-btn"
+            onClick={onResign}
+            disabled={isResigning}
+          >
+            {isResigning ? "Resigning..." : "Resign session"}
+          </button>
+          <button
+            type="button"
+            className="ghost-btn"
+            onClick={onResetArcade}
+          >
+            Reset arcade
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

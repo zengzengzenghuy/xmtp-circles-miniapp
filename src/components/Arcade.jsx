@@ -719,7 +719,7 @@ export default function Arcade({
         await transport.sendMany(result.outgoingMessages);
       }
 
-      if (!result.winner && result.gameState) {
+      if (!result.winner && result.gameState && !result.gameState.winner) {
         const autoLoss = checkAutoLoss(game, result.gameState, {
           address: localState.address,
           role: localState.session.role,
@@ -758,6 +758,8 @@ export default function Arcade({
           sessionId: state.session.sessionId,
           gameKey: selectedGame.key,
         });
+        await clearSessionStream();
+        transport.resetSessionCache();
         await transport.stopWaitingStream();
         await transport.startWaitingForJoin({
           sessionId: state.session.sessionId,
@@ -791,6 +793,7 @@ export default function Arcade({
     };
   }, [
     actions,
+    clearSessionStream,
     hasXmtp,
     onArcadeMessage,
     selectedGame,
@@ -806,8 +809,11 @@ export default function Arcade({
     if (
       !hasXmtp ||
       !selectedGame ||
-      state.phase !== PHASE.PLAYING ||
-      state.session.status !== SESSION_STATUS.ACTIVE ||
+      (state.phase !== PHASE.PLAYING && state.phase !== PHASE.RESULT) ||
+      (
+        state.session.status !== SESSION_STATUS.ACTIVE &&
+        state.session.status !== SESSION_STATUS.RESULT
+      ) ||
       !state.session.sessionId
     ) {
       return;
@@ -859,12 +865,10 @@ export default function Arcade({
     hasXmtp,
     onArcadeMessage,
     selectedGame,
-    state.phase,
     state.session.creatorAddress,
     state.session.joinerAddress,
     state.session.role,
     state.session.sessionId,
-    state.session.status,
     pushDebugEvent,
   ]);
 
@@ -872,25 +876,18 @@ export default function Arcade({
     (gameKey) => {
       actions.setError("");
       actions.setInfo("");
-      actions.selectGame(gameKey);
-    },
-    [actions],
-  );
-
-  const handleContinueFromHome = useCallback(() => {
-    if (state.selectedGameKey) {
-      if (arcadeConfig.paidMode) {
-        preparePaidFlow(state.selectedGameKey, "creator");
-      } else {
-        initializeForGame(state.selectedGameKey);
+      if (!connected || !hasXmtp) {
+        actions.selectGame(gameKey);
+        return;
       }
-    }
-  }, [
-    arcadeConfig.paidMode,
-    initializeForGame,
-    preparePaidFlow,
-    state.selectedGameKey,
-  ]);
+      if (arcadeConfig.paidMode) {
+        preparePaidFlow(gameKey, "creator");
+      } else {
+        initializeForGame(gameKey);
+      }
+    },
+    [actions, connected, hasXmtp, arcadeConfig.paidMode, initializeForGame, preparePaidFlow],
+  );
 
   const openPaymentUrl = useCallback(
     (nextUrl = paymentUrl) => {
@@ -1418,7 +1415,6 @@ export default function Arcade({
           selectedGameKey={state.selectedGameKey}
           recoverySummary={recoverySummary}
           onSelectGame={handleSelectGame}
-          onContinue={handleContinueFromHome}
           onResumeRecovery={handleResumeRecovery}
           onResetArcade={handleResetArcade}
           onOpenAccount={onOpenAccount}
@@ -1508,6 +1504,7 @@ export default function Arcade({
           info={state.info}
           onAction={handlePlayAction}
           onResign={handleResignSession}
+          onResetArcade={handleResetArcade}
           isResigning={isResigning}
         />
       );
@@ -1518,11 +1515,12 @@ export default function Arcade({
           selectedGame={selectedGame}
           gameState={state.gameState}
           secretState={state.secretState}
+          role={state.session.role}
           winner={state.session.winner}
           verification={state.verification}
           info={state.info}
           onPlayAgain={handlePlayAgain}
-          onReset={actions.resetSession}
+          onReset={handleResetArcade}
         />
       );
     }
@@ -1532,19 +1530,6 @@ export default function Arcade({
     <div className="arcade-page">
       <div className="arcade-shell">
         {state.error ? <div className="banner error">{state.error}</div> : null}
-        {state.phase !== PHASE.HOME || state.recovery.available ? (
-          <div className="arcade-shell-actions">
-            <button
-              type="button"
-              className="ghost-btn"
-              onClick={() => {
-                void handleResetArcade();
-              }}
-            >
-              Reset arcade
-            </button>
-          </div>
-        ) : null}
         {content}
       </div>
     </div>

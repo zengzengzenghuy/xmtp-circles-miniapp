@@ -1,23 +1,29 @@
 import React from 'react';
-import ClashBoard from '../components/ClashBoard.jsx';
+import RevealedLoadout from '../components/RevealedLoadout.jsx';
+import { getUsedPieceIds } from '../helpers/board.js';
 
-export default function BlockClashResultPanel({ gameState, revealState }) {
+export default function BlockClashResultPanel({ gameState, revealState, role }) {
+  const myPieceIds = revealState?.mine?.selectedPieceIds || gameState?.mySelectedPieceIds || [];
+  const opponentPieceIds = revealState?.opponent?.selectedPieceIds || gameState?.reveal?.opponent?.selectedPieceIds || [];
+  const myPlayer = role === 'joiner' ? 'joiner' : 'creator';
+  const opponentPlayer = myPlayer === 'creator' ? 'joiner' : 'creator';
+  const myUsedPieceIds = getUsedPieceIds(gameState?.placements || [], myPlayer);
+  const opponentUsedPieceIds = getUsedPieceIds(gameState?.placements || [], opponentPlayer);
+
   return (
-    <div className="panel-grid">
-      <ClashBoard
-        board={gameState.occupiedBoard}
-        title="Final board"
-        subtitle="The full placement history is replayed on the shared board."
-        className="block-clash-board"
+    <div className="panel-grid block-clash-result-grid">
+      <RevealedLoadout
+        title="Your pieces"
+        subtitle="Unused pieces are highlighted."
+        pieceIds={myPieceIds}
+        usedPieceIds={myUsedPieceIds}
       />
-
-      <div className="panel">
-        <p className="eyebrow">Reveal status</p>
-        <ul className="check-list">
-          <li>{revealState?.mine ? 'Your loadout revealed' : 'Your reveal pending'}</li>
-          <li>{revealState?.opponent ? 'Opponent loadout revealed' : 'Opponent reveal pending'}</li>
-        </ul>
-      </div>
+      <RevealedLoadout
+        title="Opponent pieces"
+        subtitle="Unused pieces are highlighted."
+        pieceIds={opponentPieceIds}
+        usedPieceIds={opponentUsedPieceIds}
+      />
     </div>
   );
 }

@@ -33,7 +33,7 @@ export default function SetupBoard({
       {error ? <div className="banner error">{error}</div> : null}
 
       <div className="ship-setup-commit">
-        <div className="action-stack">
+        <div className="action-stack" style={{ flexDirection: 'row', gap: '0.75rem' }}>
           <button type="button" className="primary-btn large-btn full-width-mobile" onClick={onCommit} disabled={!isBoardValid}>
             Commit board and continue
           </button>

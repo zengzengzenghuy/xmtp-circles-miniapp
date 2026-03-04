@@ -8,7 +8,6 @@ export default function ArcadeHome({
   selectedGameKey,
   recoverySummary,
   onSelectGame,
-  onContinue,
   onResumeRecovery,
   onResetArcade,
   onOpenAccount,
@@ -62,15 +61,6 @@ export default function ArcadeHome({
           Open account setup
         </button>
       ) : null}
-
-      <button
-        type="button"
-        className="primary-btn large-btn full-width-mobile"
-        disabled={!selectedGameKey || !connected || !hasXmtp}
-        onClick={onContinue}
-      >
-        Continue to setup
-      </button>
     </div>
   );
 }

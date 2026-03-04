@@ -31,6 +31,24 @@ async function manageLobbyMembership(client, peerInboxId) {
   }
 }
 
+async function syncArcadeDiscovery(client) {
+  try {
+    await client.conversations.sync();
+  } catch (error) {
+    if (!isIgnorableSyncError(error)) {
+      console.warn("Arcade sync failed during discovery", error);
+    }
+  }
+
+  try {
+    await client.conversations.syncAll(ARCADE_DISCOVERY_CONSENT_STATES);
+  } catch (error) {
+    if (!isIgnorableSyncError(error)) {
+      console.warn("Arcade syncAll failed during discovery", error);
+    }
+  }
+}
+
 function decodeTextContent(content) {
   if (typeof content === "string") {
     return content;
@@ -87,6 +105,17 @@ function isIgnorableSyncError(error) {
     message.includes("group is inactive") ||
     message.includes("errors occurred during sync")
   );
+}
+
+async function getConversationActivityNs(conversation) {
+  const createdAtNs = Number(conversation?.createdAtNs || 0);
+
+  try {
+    const lastMessage = await conversation.lastMessage();
+    return Number(lastMessage?.sentAtNs || 0) || createdAtNs;
+  } catch {
+    return createdAtNs;
+  }
 }
 
 async function resolveInboxId(client, address) {
@@ -185,27 +214,7 @@ export function useArcadeTransport({ xmtpClient, address }) {
 
       let peerInboxId = "";
 
-      try {
-        await xmtpClient.conversations.sync();
-      } catch (error) {
-        if (!isIgnorableSyncError(error)) {
-          console.warn(
-            "Arcade sync failed during resolveExistingSessionConversation",
-            error,
-          );
-        }
-      }
-
-      try {
-        await xmtpClient.conversations.syncAll(ARCADE_DISCOVERY_CONSENT_STATES);
-      } catch (error) {
-        if (!isIgnorableSyncError(error)) {
-          console.warn(
-            "Arcade syncAll failed during resolveExistingSessionConversation",
-            error,
-          );
-        }
-      }
+      await syncArcadeDiscovery(xmtpClient);
 
       try {
         peerInboxId = await resolveInboxId(xmtpClient, peerAddress);
@@ -304,29 +313,110 @@ export function useArcadeTransport({ xmtpClient, address }) {
     [address, parseEnvelopeForScan, xmtpClient],
   );
 
+  const resolveReusableSessionConversation = useCallback(
+    async ({ peerAddress }) => {
+      if (!xmtpClient || !peerAddress) {
+        return null;
+      }
+
+      await syncArcadeDiscovery(xmtpClient);
+
+      let peerInboxId = "";
+      try {
+        peerInboxId = await resolveInboxId(xmtpClient, peerAddress);
+      } catch {
+        return null;
+      }
+
+      let groups = [];
+      try {
+        groups = await xmtpClient.conversations.listGroups({
+          consentStates: ARCADE_DISCOVERY_CONSENT_STATES,
+        });
+      } catch (error) {
+        console.warn("Arcade failed to list groups for reuse", error);
+        return null;
+      }
+
+      const matches = [];
+      for (const group of groups) {
+        if (group.name !== "arcade-session") {
+          continue;
+        }
+
+        try {
+          if (!(await group.isActive())) {
+            continue;
+          }
+        } catch {
+          continue;
+        }
+
+        try {
+          const members = await group.members();
+          if (!members.some((member) => member.inboxId === peerInboxId)) {
+            continue;
+          }
+        } catch {
+          continue;
+        }
+
+        matches.push(group);
+      }
+
+      if (!matches.length) {
+        return null;
+      }
+
+      const rankedMatches = [];
+      for (const conversation of matches) {
+        rankedMatches.push({
+          conversation,
+          activityNs: await getConversationActivityNs(conversation),
+        });
+      }
+
+      rankedMatches.sort((left, right) => right.activityNs - left.activityNs);
+
+      const conversation = rankedMatches[0]?.conversation || matches[0];
+      conversationRef.current = conversation;
+
+      try {
+        await conversation.sync();
+      } catch (error) {
+        if (!isIgnorableSyncError(error)) {
+          console.warn("Arcade failed to sync reusable session group", error);
+        }
+      }
+
+      try {
+        await conversation.updateConsentState(ConsentState.Allowed);
+      } catch (error) {
+        console.warn("Arcade failed to allow reusable session group", error);
+      }
+
+      return conversation;
+    },
+    [xmtpClient],
+  );
+
   const connectToPeer = useCallback(
     async (peerAddress) => {
       if (!xmtpClient) {
         throw new Error("Connect to XMTP before starting an arcade session.");
       }
 
-      try {
-        await xmtpClient.conversations.sync();
-      } catch (error) {
-        if (!isIgnorableSyncError(error)) {
-          console.warn("Arcade pre-connect sync failed", error);
-        }
-      }
-
-      try {
-        await xmtpClient.conversations.syncAll(ARCADE_DISCOVERY_CONSENT_STATES);
-      } catch (error) {
-        if (!isIgnorableSyncError(error)) {
-          console.warn("Arcade pre-connect syncAll failed", error);
-        }
-      }
+      await syncArcadeDiscovery(xmtpClient);
 
       const peerInboxId = await resolveInboxId(xmtpClient, peerAddress);
+      const reusableConversation = await resolveReusableSessionConversation({
+        peerAddress,
+      });
+
+      if (reusableConversation) {
+        manageLobbyMembership(xmtpClient, peerInboxId);
+        return reusableConversation;
+      }
 
       // Create a dedicated group for this game session instead of reusing a DM.
       // Tag with groupName so the chat UI can filter out arcade groups.
@@ -356,7 +446,7 @@ export function useArcadeTransport({ xmtpClient, address }) {
 
       return conversation;
     },
-    [xmtpClient],
+    [resolveReusableSessionConversation, xmtpClient],
   );
 
   const bindConversation = useCallback(
@@ -843,6 +933,7 @@ export function useArcadeTransport({ xmtpClient, address }) {
       address,
       bindConversation,
       connectToPeer,
+      resolveReusableSessionConversation,
       resolveExistingSessionConversation,
       sendEnvelope,
       sendEnvelopeToConversation,
@@ -858,6 +949,7 @@ export function useArcadeTransport({ xmtpClient, address }) {
       address,
       bindConversation,
       connectToPeer,
+      resolveReusableSessionConversation,
       resolveExistingSessionConversation,
       loadConversationMessages,
       resetSessionCache,

@@ -18,7 +18,6 @@ export default function BlockClashPlayScreen({
     gameState.placements,
     role
   );
-  const opponentRemainingCount = gameState.opponentSelectedPieceIdsRevealed?.length || 0;
   const selectedPiece = getPieceById(gameState.selectedPieceId);
   const selectedPieceLabel = selectedPiece?.label || 'No piece selected';
 
@@ -28,14 +27,6 @@ export default function BlockClashPlayScreen({
         <div className="play-hud-card play-hud-primary">
           <span className="eyebrow">Turn</span>
           <strong>{isMyTurn ? 'Your move' : 'Opponent move'}</strong>
-        </div>
-        <div className="play-hud-card">
-          <span className="eyebrow">My pieces</span>
-          <strong>{myRemainingPieceIds.length}</strong>
-        </div>
-        <div className="play-hud-card">
-          <span className="eyebrow">Opponent pieces</span>
-          <strong>{opponentRemainingCount}</strong>
         </div>
       </div>
 

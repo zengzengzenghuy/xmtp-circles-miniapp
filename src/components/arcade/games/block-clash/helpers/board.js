@@ -1,7 +1,8 @@
 import {
   BLOCK_CLASH_BOARD_SIZE,
-  MAX_LOADOUT_SIZE,
+  TOTAL_BUDGET,
   getRotatedPieceCells,
+  getLoadoutCost,
   PIECE_CATALOG,
 } from './pieces.js';
 
@@ -62,6 +63,12 @@ export function getRemainingPieceIds(selectedPieceIds = [], placements = [], pla
   return selectedPieceIds.filter((pieceId) => !used.has(pieceId));
 }
 
+export function getUsedPieceIds(placements = [], player) {
+  return placements
+    .filter((placement) => placement.player === player)
+    .map((placement) => placement.pieceId);
+}
+
 export function hasAnyValidMove(selectedPieceIds = [], placements = []) {
   for (const pieceId of selectedPieceIds) {
     for (const rotation of [0, 90, 180, 270]) {
@@ -84,9 +91,6 @@ export function validateLoadout(pieceIds = []) {
   if (pieceIds.length === 0) {
     return { valid: false, error: 'Choose at least one piece' };
   }
-  if (pieceIds.length > MAX_LOADOUT_SIZE) {
-    return { valid: false, error: `Choose at most ${MAX_LOADOUT_SIZE} pieces` };
-  }
   const seen = new Set();
   for (const pieceId of pieceIds) {
     if (!PIECE_CATALOG.some((piece) => piece.id === pieceId)) {
@@ -96,6 +100,10 @@ export function validateLoadout(pieceIds = []) {
       return { valid: false, error: 'Each piece can only be selected once' };
     }
     seen.add(pieceId);
+  }
+  const cost = getLoadoutCost(pieceIds);
+  if (cost !== TOTAL_BUDGET) {
+    return { valid: false, error: `Loadout cost must equal ${TOTAL_BUDGET} (current: ${cost})` };
   }
   return { valid: true, error: '' };
 }
@@ -137,6 +145,7 @@ export function applyPlacement({ gameState, player, pieceId, rotation, x, y }) {
 
 export function getWinnerAfterMove({ gameState, moverRole, moverSelectedPieceIds, defenderSelectedPieceIds }) {
   const moverRemaining = getRemainingPieceIds(moverSelectedPieceIds, gameState.placements, moverRole);
+  // Placing all pieces wins immediately.
   if (moverRemaining.length === 0) {
     return moverRole;
   }
@@ -199,6 +208,7 @@ export function verifyRevealedGame({
   const joinerRemaining = opponentLoadout.filter((pieceId) => !seenByPlayer.joiner.has(pieceId));
 
   let expectedWinner = '';
+  // Using all pieces wins immediately.
   if (creatorRemaining.length === 0) {
     expectedWinner = 'creator';
   } else if (joinerRemaining.length === 0) {

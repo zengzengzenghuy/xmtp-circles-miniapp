@@ -1,6 +1,6 @@
 import React from 'react';
 import Board from './Board.jsx';
-import { getRemainingShips } from '../helpers/board.js';
+import { FLEET, getRemainingShips } from '../helpers/board.js';
 
 export default function ShipPlacer({
   board,
@@ -13,9 +13,10 @@ export default function ShipPlacer({
   const nextShip = remainingShips[0] || null;
   const totalShipsCount = 5;
   const placedShipsCount = totalShipsCount - remainingShips.length;
+  const remainingIds = new Set(remainingShips.map((ship) => ship.id));
 
   return (
-    <div className="ship-placer">
+    <div className="ship-placer ship-placer-grid">
       <div className="battleship-setup-board-wrap">
         <Board
           board={board}
@@ -26,7 +27,7 @@ export default function ShipPlacer({
         />
       </div>
 
-      <div className="panel">
+      <aside className="panel ship-placer-side-panel">
         <p className="eyebrow">
           {nextShip ? `Place ${nextShip.name}` : 'Fleet ready'}
         </p>
@@ -35,28 +36,29 @@ export default function ShipPlacer({
             ? `Length ${nextShip.length} · Placing ${placedShipsCount + 1} of ${totalShipsCount}`
             : `All ${totalShipsCount} ships placed. Commit when ready.`}
         </p>
-        <div className="ship-progress-inline" style={{ marginTop: '0.5rem' }}>
-          <span className={`ship-pill ${nextShip ? 'active' : 'ready'}`}>
-            {nextShip ? `${remainingShips.length} ships left` : 'Fleet ready'}
-          </span>
-          {remainingShips
-            .filter((ship) => ship !== nextShip)
-            .map((ship) => (
-              <span key={ship.id} className="ship-pill">
-                {ship.name}
-              </span>
-            ))}
+        <div className="ship-list ship-list-vertical" aria-label="Fleet status">
+          {FLEET.map((ship) => {
+            const isNext = nextShip?.id === ship.id;
+            const isPlaced = !remainingIds.has(ship.id);
+            return (
+              <div
+                key={ship.id}
+                className={`ship-list-item${isNext ? ' active' : ''}${isPlaced ? ' placed' : ''}`}
+              >
+                <span>{ship.name}</span>
+              </div>
+            );
+          })}
         </div>
-      </div>
-
-      <div className="action-stack" style={{ flexDirection: 'row', gap: '0.5rem' }}>
-        <button type="button" className="secondary-btn" onClick={onRotate}>
-          Rotate: {orientation}
-        </button>
-        <button type="button" className="ghost-btn" onClick={onReset}>
-          Reset board
-        </button>
-      </div>
+        <div className="ship-controls-row">
+          <button type="button" className="secondary-btn" onClick={onRotate}>
+            Rotate: {orientation}
+          </button>
+          <button type="button" className="ghost-btn" onClick={onReset}>
+            Reset board
+          </button>
+        </div>
+      </aside>
     </div>
   );
 }

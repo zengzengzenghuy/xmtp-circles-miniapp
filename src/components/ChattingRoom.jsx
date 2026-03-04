@@ -39,21 +39,55 @@ function parseArcadeEnvelope(text) {
   }
 }
 
+function formatBoardCoord(x, y) {
+  if (!Number.isInteger(x) || !Number.isInteger(y)) {
+    return "unknown square";
+  }
+  return `${String.fromCharCode(65 + x)}${y + 1}`;
+}
+
+function formatBlockPieceLabel(gameKey, pieceId) {
+  if (!pieceId) return "piece";
+  const gameDef = getGameDefinition(gameKey);
+  const piece = gameDef?.pieces?.find((entry) => entry.id === pieceId);
+  return piece?.label || pieceId;
+}
+
 function formatArcadeEvent(envelope) {
   const type = String(envelope.type || "").toUpperCase();
+  const payload = envelope.payload || {};
   if (type === "SESSION_JOIN") return "Joined the session";
   if (type === "SESSION_READY") return "Session ready";
   if (type === "SESSION_JOIN_REJECTED") return "Join rejected";
   if (type.includes("GAME_OVER")) {
-    const winner = envelope.payload?.winner;
-    const reason = envelope.payload?.reason;
+    const winner = payload.winner;
+    const reason = payload.reason;
     if (reason === "resign") return `Resigned — Winner: ${formatAddress(winner)}`;
     return `Game Over — Winner: ${formatAddress(winner)}`;
   }
-  if (type.includes("REVEAL")) return "Setup revealed for verification";
-  if (type.includes("MOVE_RESULT") || type.includes("SHOT_RESULT"))
-    return "Move result received";
-  if (type.includes("MOVE") || type.includes("SHOT")) return "Made a move";
+  if (type.includes("REVEAL")) {
+    return envelope.gameKey === "block_clash"
+      ? "Revealed pieces for verification"
+      : "Revealed setup for verification";
+  }
+  if (type.includes("SHOT_RESULT")) {
+    const square = formatBoardCoord(payload.x, payload.y);
+    if (payload.sunkShipId) {
+      return `Shot ${square} landed and sank a ship`;
+    }
+    return `Shot ${square} ${payload.hit ? "hit" : "missed"}`;
+  }
+  if (type.includes("BATTLESHIP_SHOT")) {
+    return `Fired at ${formatBoardCoord(payload.x, payload.y)}`;
+  }
+  if (type.includes("BLOCK_MOVE")) {
+    const pieceLabel = formatBlockPieceLabel(envelope.gameKey, payload.pieceId);
+    const rotation = Number(payload.rotation || 0);
+    const rotationLabel = rotation ? ` · ${rotation}°` : "";
+    return `Placed ${pieceLabel} at ${formatBoardCoord(payload.x, payload.y)}${rotationLabel}`;
+  }
+  if (type.includes("MOVE_RESULT")) return "Move result received";
+  if (type.includes("MOVE") || type.includes("SHOT")) return "Played a move";
   return type.replaceAll("_", " ").toLowerCase();
 }
 
@@ -103,6 +137,16 @@ function SessionItem({ session, selected, onClick }) {
       </div>
     </div>
   );
+}
+
+function sessionDedupeKey(session) {
+  if (session.isLobby) {
+    return `lobby:${session.id}`;
+  }
+  if (session.opponentAddress) {
+    return `peer:${String(session.opponentAddress).toLowerCase()}`;
+  }
+  return `group:${session.id}`;
 }
 
 function InviteBanner({ inviteLink, lobby, onShareToLobby }) {
@@ -161,7 +205,7 @@ function SessionList({ sessions, lobby, selectedId, onSelect, onRefresh, loading
         <div style={{ display: "flex", gap: "0.5rem" }}>
           {onNewSession && (
             <button
-              className="new-conversation-btn"
+              className="new-message-btn"
               onClick={onNewSession}
               title="Add player to lobby"
             >
@@ -390,7 +434,10 @@ function SessionMessageArea({
             </p>
           </div>
         ) : (
-          messages
+          (() => {
+            const seenGameOverSessions = new Set();
+
+            return messages
             .filter((msg) => !isSystemMessage(msg.content))
             .map((msg) => {
               const text = decodeMessageText(msg.content);
@@ -399,6 +446,20 @@ function SessionMessageArea({
               const timestamp = new Date(Number(msg.sentAtNs) / 1_000_000);
 
               if (arcadeEnvelope) {
+                const envelopeType = String(arcadeEnvelope.type || "").toUpperCase();
+                if (
+                  envelopeType.includes("REVEAL") &&
+                  arcadeEnvelope.gameKey === "block_clash"
+                ) {
+                  return null;
+                }
+                if (envelopeType.includes("GAME_OVER")) {
+                  const sessionKey = String(arcadeEnvelope.sessionId || "");
+                  if (seenGameOverSessions.has(sessionKey)) {
+                    return null;
+                  }
+                  seenGameOverSessions.add(sessionKey);
+                }
                 return (
                   <div key={msg.id} className="arcade-event">
                     <span className="arcade-event-text">
@@ -472,6 +533,7 @@ function SessionMessageArea({
                 </div>
               );
             })
+          })()
         )}
         <div ref={messagesEndRef} />
       </div>
@@ -605,10 +667,12 @@ export default function ChattingRoom({ xmtpClient, address, inviteLink, onJoinIn
 
         let opponentAddress = null;
         let createdAt = null;
+        let lastActivityAt = null;
         let lastPreview = "No messages yet";
 
         try {
           createdAt = Number(group.createdAtNs) / 1_000_000;
+          lastActivityAt = createdAt;
         } catch {
           // ignore
         }
@@ -628,6 +692,7 @@ export default function ChattingRoom({ xmtpClient, address, inviteLink, onJoinIn
         try {
           const lastMsg = await group.lastMessage();
           if (lastMsg) {
+            lastActivityAt = Number(lastMsg.sentAtNs) / 1_000_000 || lastActivityAt;
             const text = decodeMessageText(lastMsg.content);
             const envelope = parseArcadeEnvelope(text);
             if (envelope) {
@@ -646,14 +711,42 @@ export default function ChattingRoom({ xmtpClient, address, inviteLink, onJoinIn
           conversation: group,
           opponentAddress,
           createdAt,
+          lastActivityAt,
           lastPreview,
         });
       }
 
-      // Sort newest first
-      arcadeGroups.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-      setSessions(arcadeGroups);
+      // Prefer the most recently active thread for each opponent.
+      arcadeGroups.sort((a, b) => {
+        const leftTime = a.lastActivityAt || a.createdAt || 0;
+        const rightTime = b.lastActivityAt || b.createdAt || 0;
+        return rightTime - leftTime;
+      });
+      const dedupedGroups = [];
+      const seenSessionKeys = new Set();
+      for (const session of arcadeGroups) {
+        const key = sessionDedupeKey(session);
+        if (seenSessionKeys.has(key)) {
+          continue;
+        }
+        seenSessionKeys.add(key);
+        dedupedGroups.push(session);
+      }
+
+      setSessions(dedupedGroups);
       setLobby(foundLobby);
+      setSelectedSession((current) => {
+        if (!current) {
+          return current;
+        }
+
+        if (current.isLobby) {
+          return foundLobby || null;
+        }
+
+        const currentKey = sessionDedupeKey(current);
+        return dedupedGroups.find((session) => sessionDedupeKey(session) === currentKey) || null;
+      });
     } catch (err) {
       console.error("Failed to load arcade sessions", err);
     } finally {

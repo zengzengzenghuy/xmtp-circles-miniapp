@@ -29,13 +29,15 @@ export default function PiecePreview({ pieceId, rotation, onRotate, compact = fa
         <h2>{piece?.label || pieceId}</h2>
         <p className="muted">{interactive ? `Tap to rotate · ${rotation}°` : `Rotation ${rotation}°`}</p>
       </div>
-      <PieceShape
-        pieceId={pieceId}
-        rotation={rotation}
-        gridClassName="piece-preview-grid"
-        cellClassName="piece-preview-cell"
-        filledCellClassName="piece-preview-cell-filled"
-      />
+      <div className="piece-preview-shape-wrap">
+        <PieceShape
+          pieceId={pieceId}
+          rotation={rotation}
+          gridClassName="piece-preview-grid"
+          cellClassName="piece-preview-cell"
+          filledCellClassName="piece-preview-cell-filled"
+        />
+      </div>
     </button>
   );
 }

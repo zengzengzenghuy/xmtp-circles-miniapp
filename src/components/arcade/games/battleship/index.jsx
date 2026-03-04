@@ -1,3 +1,4 @@
+import React from 'react';
 import { GAME_KEYS } from "../../helpers/constants.js";
 import {
   BOARD_SIZE,
@@ -56,7 +57,14 @@ function buildRevealState(gameState, secretState, opponentReveal, match, role) {
 export const gameDefinition = {
   key: GAME_KEYS.BATTLESHIP,
   label: 'Battleship',
-  icon: '\u{1F6A2}',
+  icon: (
+    <svg viewBox="0 0 64 64" width="48" height="48" fill="none" aria-hidden="true">
+      <path d="M6 41h52l-6 11H12z" fill="currentColor" opacity="0.14" />
+      <path d="M17 33h22c3 0 6 2 7 5l1 3H15l1-4c0-2 1-4 1-4Z" fill="currentColor" opacity="0.24" />
+      <rect x="25" y="24" width="9" height="8" rx="2" fill="currentColor" opacity="0.28" />
+      <path d="M32 15c4 0 7 3 7 7v2h-4v-2c0-2-1-3-3-3h-2v-4h2Z" fill="currentColor" opacity="0.28" />
+    </svg>
+  ),
   shortDescription: 'Hide your fleet and fire shots',
   description: 'Place a hidden fleet, trade shots over XMTP, and reveal both boards at the end.',
   moveStyle: 'request-response',

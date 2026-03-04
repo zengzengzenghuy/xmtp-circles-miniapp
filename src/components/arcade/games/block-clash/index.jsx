@@ -1,3 +1,4 @@
+import React from 'react';
 import { GAME_KEYS } from "../../helpers/constants.js";
 import {
   applyPlacement,
@@ -11,7 +12,7 @@ import {
   verifyRevealedGame,
 } from './helpers/board.js';
 import { buildBlockClashCommitment } from './helpers/commitment.js';
-import { BLOCK_CLASH_BOARD_SIZE, MAX_LOADOUT_SIZE, PIECE_CATALOG, PIECE_INDEX } from './helpers/pieces.js';
+import { BLOCK_CLASH_BOARD_SIZE, TOTAL_BUDGET, PIECE_CATALOG, PIECE_INDEX, getLoadoutCost } from './helpers/pieces.js';
 import SetupScreen from './screens/SetupScreen.jsx';
 import PlayScreen from './screens/PlayScreen.jsx';
 import ResultPanel from './screens/ResultPanel.jsx';
@@ -19,7 +20,15 @@ import ResultPanel from './screens/ResultPanel.jsx';
 export const gameDefinition = {
   key: GAME_KEYS.BLOCK_CLASH,
   label: 'Block Clash',
-  icon: '\u{1F9E9}',
+  icon: (
+    <svg viewBox="0 0 64 64" width="48" height="48" fill="none" aria-hidden="true">
+      <rect x="5" y="18" width="14" height="14" rx="3" fill="currentColor" opacity="0.16" />
+      <rect x="19" y="18" width="14" height="14" rx="3" fill="currentColor" opacity="0.24" />
+      <rect x="5" y="32" width="14" height="14" rx="3" fill="currentColor" opacity="0.24" />
+      <rect x="45" y="18" width="14" height="14" rx="3" fill="currentColor" opacity="0.24" />
+      <rect x="45" y="32" width="14" height="14" rx="3" fill="currentColor" opacity="0.16" />
+    </svg>
+  ),
   shortDescription: 'Place blocks and trap your opponent',
   description: 'Choose a hidden piece loadout, take turns placing tetromino-like shapes, and trap the other side.',
   moveStyle: 'fire-and-forget',
@@ -75,7 +84,7 @@ export const gameDefinition = {
       },
       publicConfig: {
         boardSize: BLOCK_CLASH_BOARD_SIZE,
-        catalogId: 'block-clash-v1',
+        catalogId: 'block-clash-v2',
       },
     };
   },
@@ -94,11 +103,11 @@ export const gameDefinition = {
 
   createPreviewState(mode, address, opponentAddress = '0x000000000000000000000000000000000000b0b0') {
     const setupState = {
-      selectedPieceIds: ['domino', 'tri_l', 'square_o', 'tet_l'],
+      selectedPieceIds: ['domino', 'tri_l', 'square_o', 'tet_l', 'tet_t', 'tet_s', 'tet_j', 'tri_i'],
     };
     const commitment = buildBlockClashCommitment(setupState);
     const opponentSetup = {
-      selectedPieceIds: ['domino', 'tri_i', 'tet_t', 'tet_s'],
+      selectedPieceIds: ['domino', 'tri_i', 'tet_t', 'tet_s', 'square_o', 'tet_l', 'tet_j', 'tet_z'],
     };
     const opponentCommitment = buildBlockClashCommitment(opponentSetup);
 
@@ -135,7 +144,7 @@ export const gameDefinition = {
           : { mine: null, opponent: null },
       },
       summary: [
-        `${setupState.selectedPieceIds.length} / ${MAX_LOADOUT_SIZE} pieces selected`,
+        `${getLoadoutCost(setupState.selectedPieceIds)} / ${TOTAL_BUDGET} budget used (${setupState.selectedPieceIds.length} pieces)`,
         `${BLOCK_CLASH_BOARD_SIZE}x${BLOCK_CLASH_BOARD_SIZE} shared board`,
       ],
       opponentAddress,
@@ -145,9 +154,10 @@ export const gameDefinition = {
   },
 
   getSetupSummary(secretState) {
-    const count = secretState?.selectedPieceIds?.length || 0;
+    const ids = secretState?.selectedPieceIds || [];
+    const cost = getLoadoutCost(ids);
     return [
-      `${count} private pieces selected`,
+      `${cost} / ${TOTAL_BUDGET} budget (${ids.length} pieces)`,
       `${BLOCK_CLASH_BOARD_SIZE}x${BLOCK_CLASH_BOARD_SIZE} shared board`,
     ];
   },
@@ -168,7 +178,7 @@ export const gameDefinition = {
       const selected = new Set(action.setupState.selectedPieceIds);
       if (selected.has(action.pieceId)) {
         selected.delete(action.pieceId);
-      } else if (selected.size < MAX_LOADOUT_SIZE) {
+      } else if (getLoadoutCost([...selected, action.pieceId]) <= TOTAL_BUDGET) {
         selected.add(action.pieceId);
       }
       return {
@@ -274,7 +284,12 @@ export const gameDefinition = {
       defenderSelectedPieceIds: gameState.opponentSelectedPieceIdsRevealed || [],
     });
 
-    const winner = winnerRole ? context.address : '';
+    let winner = '';
+    if (winnerRole === context.role) {
+      winner = context.address;
+    } else if (winnerRole) {
+      winner = context.opponentAddress;
+    }
 
     return {
       gameState: {
@@ -304,8 +319,7 @@ export const gameDefinition = {
     );
 
     if (!hasAnyValidMove(remaining, gameState.placements)) {
-      const winner = context.opponentAddress;
-      return { lost: true, winner };
+      return { lost: true, winner: context.opponentAddress };
     }
 
     return { lost: false };
@@ -338,7 +352,14 @@ export const gameDefinition = {
       opponentRole
     );
 
-    if (opponentRemaining.length === 0) return { gameState };
+    // Opponent used all pieces = opponent wins.
+    if (opponentRemaining.length === 0) {
+      return {
+        gameState: { ...gameState, winner: opponentAddress },
+        winner: opponentAddress,
+        info: 'Opponent used all pieces.',
+      };
+    }
 
     // Try random placements for each remaining piece
     const rotations = [0, 90, 180, 270];

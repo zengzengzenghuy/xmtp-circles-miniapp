@@ -5,6 +5,7 @@ export default function SessionResult({
   selectedGame,
   gameState,
   secretState,
+  role,
   winner,
   verification,
   info,
@@ -42,23 +43,24 @@ export default function SessionResult({
 
       <ResultPanel
         gameState={gameState}
+        role={role}
         revealState={{
           mine: secretState,
           opponent: gameState?.reveal?.opponent || null,
         }}
       />
 
-      <div className="panel action-stack">
+      <div className="panel result-actions-row">
         <button
           type="button"
-          className="primary-btn full-width-mobile"
+          className="primary-btn"
           onClick={onPlayAgain}
         >
           Play again
         </button>
         <button
           type="button"
-          className="ghost-btn full-width-mobile"
+          className="ghost-btn"
           onClick={onReset}
         >
           Back to arcade
