@@ -52,10 +52,10 @@ Transport is isolated in [`hooks/useArcadeTransport.js`](hooks/useArcadeTranspor
 
 | Method | When Used | Effect |
 |--------|-----------|--------|
-| `connectToPeer(address)` | First connection (joiner creates group to reach creator) | Creates a **new XMTP group**, syncs, sets consent to Allowed |
+| `connectToPeer(address)` | First session connect or per-opponent session reuse | Syncs discovery, reuses the newest active `arcade-session` group for that peer when available, otherwise creates a **new XMTP group** |
 | `bindConversation(id)` | Reconnection (stored `conversationId` exists) | Retrieves **existing** group by ID, no new group created |
 
-The coordinator stores `conversationId` in session state after the first connection. On reconnect (app reload, useEffect re-fire), it passes this ID to `bindConversation` to avoid creating duplicate groups.
+The coordinator stores `conversationId` in session state after the first connection. On reconnect (app reload, useEffect re-fire), it passes this ID to `bindConversation` to reopen that exact conversation. If no stored ID is available, `connectToPeer()` can still reuse the most recently active per-opponent arcade thread before creating a new group.
 
 ### Dual Discovery (Creator Waiting for Join)
 
@@ -95,6 +95,8 @@ sequenceDiagram
 **Why dual?**
 - **Stream** — fast real-time response when XMTP push works
 - **Sweep** — fallback that polls every 3 seconds, handles missed messages and MLS welcome message delays
+
+When entering `CREATE_INVITE`, the coordinator clears any previous session stream and resets the session dedupe cache before starting the waiting flow. This prevents stale terminal messages from an earlier match from consuming new join traffic.
 
 ### Message Filtering
 
@@ -178,6 +180,7 @@ sequenceDiagram
     UI->>UI: createInvitePayload() → base64url link
     Note over UI: Invite contains: sessionId, gameKey,<br/>creatorAddress, creatorCommitment, publicConfig
 
+    Note over UI: Clear previous session stream<br/>and reset session cache
     UI->>XMTP: startWaitingForJoin({ sessionId, gameKey })
     Note over XMTP: Dual discovery: stream + sweep polling
 
@@ -219,7 +222,7 @@ sequenceDiagram
     UI->>UI: handleJoinSession()
 
     UI->>XMTP: connectToPeer(creatorAddress)
-    Note over XMTP: Creates NEW XMTP group<br/>Resolves creator inboxId<br/>Sets consent = Allowed
+    Note over XMTP: Reuses the newest active arcade-session with the creator when available, otherwise creates a new XMTP group
 
     UI->>XMTP: startSessionStream({ sessionId, gameKey })
     UI->>XMTP: loadConversationMessages() → replay history
@@ -301,6 +304,8 @@ sequenceDiagram
     end
 ```
 
+Terminal messages can arrive out of order relative to the last `BLOCK_CLASH_MOVE`. The shell protocol stores winner/reveal state immediately, then waits for the final board state before confirming verification.
+
 ### Game Over and Verification
 
 ```mermaid
@@ -313,20 +318,24 @@ sequenceDiagram
 
     Winner->>XMTP: GAME_OVER { winner: winnerAddress }
     Winner->>XMTP: REVEAL { salt, ...secretSetup }
+    Note over XMTP,Loser: Terminal envelopes may arrive before the last move on the losing client
 
     XMTP-->>Loser: Receive GAME_OVER
-    Loser->>Loser: Set winner in gameState
+    Loser->>Loser: Store winner and reveal state
     Loser->>XMTP: REVEAL { salt, ...secretSetup }
-    Note over Loser: Winner also reveals their setup
+    Note over Loser: Verification is deferred until<br/>the terminal board state is available locally
+
+    XMTP-->>Loser: Receive/apply final move (if delayed)
+    Loser->>Loser: Run verification once board + reveal are ready
 
     XMTP-->>Winner: Receive REVEAL from loser
 
     par Both sides verify
-        Winner->>Winner: runVerification()
-        Loser->>Loser: runVerification()
+        Winner->>Winner: runVerification() when board is ready
+        Loser->>Loser: runVerification() after final move is applied
     end
 
-    Note over Winner,Loser: Verification steps:<br/>1. Deserialize opponent reveal<br/>2. Extract salt from reveal<br/>3. Compute keccak256(secret + salt)<br/>4. Compare to stored commitment<br/>5. Call gameDef.verifyGameRules()<br/>6. Confirm declared winner matches board state
+    Note over Winner,Loser: Verification waits for a complete board state before confirming the result.<br/>The first accepted winner is latched in UI state so later duplicate terminal traffic does not flip the result.
 ```
 
 ### Reconnection Flow
@@ -351,8 +360,8 @@ sequenceDiagram
     else No stored conversationId
         App->>Transport: connectToPeer(peerAddress)
         Transport->>XMTP: resolveInboxId(peerAddress)
-        Transport->>XMTP: createGroup([peerInboxId])
-        Note over Transport: Creates NEW XMTP group
+        Transport->>XMTP: reuse active arcade-session or createGroup([peerInboxId])
+        Note over Transport: Reuses the newest active peer thread when available, otherwise creates a new XMTP group
     end
 
     App->>Transport: startSessionStream({ sessionId, gameKey, onMessage })
@@ -416,6 +425,8 @@ Joiner:   DRAFT → WAITING_FOR_READY → ACTIVE → RESULT
 | `mySeq` / `expectedOpponentSeq` | Move sequence counters |
 | `winner` | Winner address (set at game end) |
 
+The reducer latches the first accepted winner for the session. Successful verification is also treated as settled state, so late duplicate terminal messages do not replace an already verified result.
+
 ### Phase Flow (UI)
 
 ```
@@ -444,11 +455,13 @@ HOME → PAYMENT_SELECT → PAYMENT_WAIT → SETUP → ...
 - **Move style:** fire-and-forget
 - **Turn order:** creator starts
 - **Board:** 7x7 grid
-- Setup: select 8 pieces from catalog of 10 variations
+- Setup: choose a hidden loadout totaling 8 budget points from the shared piece catalog
+- Piece costs: 2-4 block pieces = 1 point, 6-block pieces = 2 points, 8-block pieces = 4 points
+- Catalog: 15 piece options, revealed only during result verification
 - Player places piece → sends `BLOCK_CLASH_MOVE`
 - No response needed — opponent applies placement locally
 - Auto-loss: after opponent's move, if current player has no valid placement, they lose
-- Game ends when a player places all pieces or gets stuck
+- Game ends when a player places all of their pieces or the opponent gets stuck
 
 ---
 
@@ -463,6 +476,7 @@ Invite payload contains:
 - `creatorAddress`, `creatorCommitment`
 - `publicConfig` (includes billing metadata if paid mode)
 - `createdAt`
+- `expiresAt`
 
 ---
 
@@ -501,15 +515,16 @@ Storage keys:
 
 ## Result Verification
 
-Driven by stored commitments, opponent reveal payload, and game-specific verification logic. The shell protocol calls `runVerification()` when a REVEAL message arrives:
+Driven by stored commitments, opponent reveal payload, winner state, and game-specific verification logic. The shell protocol runs verification when terminal data is available and the local board is ready; if terminal messages arrive before the last move, verification is deferred and rerun after the move is applied.
 
-1. Deserialize opponent's reveal payload
-2. Extract and normalize salt
-3. Recompute `keccak256(secret + salt)`, compare to stored commitment
-4. Call `gameDef.verifyGameRules()` to validate move legality and winner
-5. Update `state.verification` with `{ canConfirm, contested, reason }`
+1. Store winner and opponent reveal state as terminal messages arrive
+2. If the final board is not ready yet, defer verification
+3. Deserialize opponent's reveal payload once the board is ready
+4. Extract and normalize salt, then recompute `keccak256(secret + salt)` against the stored commitment
+5. Call `gameDef.verifyGameRules()` to validate move legality and winner
+6. Latch successful verification so late protocol noise does not overwrite it
 
-The result screen surfaces whether the final state is consistent with the committed setup.
+The result screen surfaces whether the final state is consistent with the committed setup after terminal state is complete.
 
 ---
 
