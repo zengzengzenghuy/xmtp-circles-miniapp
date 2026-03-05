@@ -267,6 +267,22 @@ function CirclesGroup({ address }) {
           `Check console for full details.`,
       );
 
+      // TODO: logic to createGroup in xmtp
+
+      // const conversation = await client.conversations.createGroup(
+      //   inboxIds, // members inbox ID (getInboxID by identifierID)
+      //   options: {groupName: name,
+      //   groupDescription: description,
+      //   groupImageUrlSquare: imageUrlSquare,
+      //   permissions: permissionsPolicy,
+      //   customPermissionPolicySet:
+      //     permissionsPolicy === GroupPermissionsOptions.CustomPolicy
+      //       ? policySet
+      //       : undefined,
+      // },
+      // );
+      // TODO: store {result.groupAddress : conversation.id} pair in backend
+
       // Close modal and reset form
       setIsCreateModalOpen(false);
       setFormData({
