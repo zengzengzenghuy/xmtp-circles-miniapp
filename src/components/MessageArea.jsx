@@ -1,10 +1,17 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useAccount } from "wagmi";
 import { useConversation } from "../hooks/useConversation";
+import { useMetadata } from "../stores/inboxHooks";
+import { getProfileByAddress } from "../helpers/circlesRpcCall";
 
 function MessageArea({ conversation, xmtpClient, onBack, className }) {
   const { address } = useAccount();
   const [inputValue, setInputValue] = useState("");
+  const [circlesProfile, setCirclesProfile] = useState(null);
+  const [circlesLoading, setCirclesLoading] = useState(false);
+
+  // Get metadata for the conversation
+  const metadata = useMetadata(conversation?.id || "");
 
   // Use the conversation hook to get messages and send functionality
   const {
@@ -16,6 +23,39 @@ function MessageArea({ conversation, xmtpClient, onBack, className }) {
     sending: isSending,
     loading: isLoadingMessages,
   } = useConversation(conversation?.id || "");
+
+  // Helper to get full peer address (not truncated)
+  const getFullPeerAddress = () => {
+    if (metadata.identifier || (metadata.name && metadata.name.startsWith('0x'))) {
+      return metadata.identifier || metadata.name;
+    }
+    return null;
+  };
+
+  // Fetch Circles profile for the peer
+  useEffect(() => {
+    const fetchCirclesProfile = async () => {
+      const fullAddress = getFullPeerAddress();
+      if (!fullAddress || !conversation) {
+        setCirclesProfile(null);
+        return;
+      }
+
+      setCirclesLoading(true);
+
+      try {
+        const profile = await getProfileByAddress(fullAddress);
+        setCirclesProfile(profile);
+      } catch (error) {
+        console.error("Error fetching Circles profile:", error);
+        setCirclesProfile(null);
+      } finally {
+        setCirclesLoading(false);
+      }
+    };
+
+    fetchCirclesProfile();
+  }, [conversation?.id, metadata.identifier, metadata.name]);
 
   // Load messages when conversation changes
   useEffect(() => {
@@ -76,8 +116,14 @@ function MessageArea({ conversation, xmtpClient, onBack, className }) {
         ? String(conversation.id).slice(0, 8) + "..."
         : "Unknown";
 
+  // Determine display name - use Circles profile name if available
+  const displayName = circlesProfile?.name || peerAddress;
+
   // Get avatar initials safely - for addresses, skip the "0x" prefix
   const getAvatarText = () => {
+    if (circlesProfile?.name) {
+      return circlesProfile.name.slice(0, 2).toUpperCase();
+    }
     if (peerAddress.startsWith('0x')) {
       return peerAddress.slice(2, 4).toUpperCase();
     }
@@ -93,9 +139,17 @@ function MessageArea({ conversation, xmtpClient, onBack, className }) {
         {onBack && (
           <button className="back-btn" onClick={onBack} aria-label="Back">&#8592;</button>
         )}
-        <div className="conversation-avatar-small">{avatarText}</div>
+        {circlesProfile && circlesProfile.previewImageUrl ? (
+          <img
+            src={circlesProfile.previewImageUrl}
+            alt={circlesProfile.name}
+            className="conversation-avatar-image-small"
+          />
+        ) : (
+          <div className="conversation-avatar-small">{avatarText}</div>
+        )}
         <div className="header-info">
-          <span className="header-address">{peerAddress}</span>
+          <span className="header-address">{displayName}</span>
         </div>
       </div>
 

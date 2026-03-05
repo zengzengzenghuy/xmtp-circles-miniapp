@@ -1,19 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 function NewConversationModal({ isOpen, onClose, onCreateConversation }) {
+  const [mode, setMode] = useState(null); // null, 'dm', or 'group'
   const [recipientInput, setRecipientInput] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
+  const [groupMembers, setGroupMembers] = useState([]);
   const searchTimeoutRef = useRef(null);
 
   // Reset state when modal opens/closes
   useEffect(() => {
     if (!isOpen) {
+      setMode(null);
       setRecipientInput('');
       setSearchResults([]);
       setIsSearching(false);
       setSelectedIndex(-1);
+      setGroupMembers([]);
     }
   }, [isOpen]);
 
@@ -68,19 +72,44 @@ function NewConversationModal({ isOpen, onClose, onCreateConversation }) {
   }, [recipientInput]);
 
   const handleSelectResult = (address) => {
-    onCreateConversation(address);
-    setRecipientInput('');
-    setSearchResults([]);
-    onClose();
-  };
-
-  const handleSubmit = () => {
-    if (recipientInput.trim()) {
-      onCreateConversation(recipientInput.trim());
+    if (mode === 'group') {
+      // For group mode, add to members array
+      handleAddMember(address);
+    } else {
+      // For DM mode, create conversation immediately
+      onCreateConversation(address);
       setRecipientInput('');
       setSearchResults([]);
       onClose();
     }
+  };
+
+  const handleSubmit = () => {
+    if (recipientInput.trim()) {
+      if (mode === 'group') {
+        // For group mode, add to members array
+        handleAddMember(recipientInput.trim());
+      } else {
+        // For DM mode, create conversation immediately
+        onCreateConversation(recipientInput.trim());
+        setRecipientInput('');
+        setSearchResults([]);
+        onClose();
+      }
+    }
+  };
+
+  const handleAddMember = (address) => {
+    // Add address to temporary array if not already added
+    if (!groupMembers.includes(address)) {
+      const updatedMembers = [...groupMembers, address];
+      setGroupMembers(updatedMembers);
+      console.log('Group members:', updatedMembers);
+    }
+    // Clear input after adding
+    setRecipientInput('');
+    setSearchResults([]);
+    setSelectedIndex(-1);
   };
 
   const handleKeyDown = (e) => {
@@ -139,55 +168,115 @@ function NewConversationModal({ isOpen, onClose, onCreateConversation }) {
           </button>
         </div>
         <div className="modal-body">
-          <label className="modal-label">Recipient</label>
-          <div className="search-input-container">
-            <input
-              type="text"
-              className="modal-input"
-              placeholder="Enter name or wallet address (0x...)"
-              value={recipientInput}
-              onChange={handleInputChange}
-              onKeyDown={handleKeyDown}
-              autoFocus
-            />
-            {isSearching && (
-              <div className="search-loading">Searching...</div>
-            )}
-            {showDropdown && (
-              <div className="search-results-dropdown">
-                {searchResults.slice(0, 5).map((result, index) => (
-                  <div
-                    key={result.address}
-                    className={`search-result-item ${
-                      index === selectedIndex ? 'selected' : ''
-                    }`}
-                    onClick={() => handleSelectResult(result.address)}
-                    onMouseEnter={() => setSelectedIndex(index)}
-                  >
-                    <div className="search-result-name">{result.name}</div>
-                    <div className="search-result-address">
-                      {result.address}
-                    </div>
-                  </div>
-                ))}
-                {searchResults.length > 5 && (
-                  <div className="search-result-more">
-                    +{searchResults.length - 5} more results
-                  </div>
-                )}
+          {mode === null ? (
+            // Mode selection view
+            <div className="mode-selection">
+              <button
+                className="mode-selection-btn"
+                onClick={() => setMode('dm')}
+              >
+                Add new dm
+              </button>
+              <button
+                className="mode-selection-btn"
+                onClick={() => setMode('group')}
+              >
+                Add new group chat
+              </button>
+            </div>
+          ) : (
+            // Search view (for both DM and Group)
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <button
+                  className="back-btn"
+                  onClick={() => setMode(null)}
+                  style={{ marginRight: '0.5rem' }}
+                >
+                  ← Back
+                </button>
+                <label className="modal-label">
+                  {mode === 'group' ? 'Add Members' : 'Recipient'}
+                </label>
               </div>
-            )}
+
+              {mode === 'group' && groupMembers.length > 0 && (
+                <div className="group-members-list" style={{ marginBottom: '1rem' }}>
+                  <strong>Members ({groupMembers.length}):</strong>
+                  {groupMembers.map((member, index) => (
+                    <div key={index} style={{ fontSize: '0.9rem', marginTop: '0.25rem' }}>
+                      {member}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="search-input-container">
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}>
+                  <div style={{ flex: 1, position: 'relative' }}>
+                    <input
+                      type="text"
+                      className="modal-input"
+                      placeholder="Enter name or wallet address (0x...)"
+                      value={recipientInput}
+                      onChange={handleInputChange}
+                      onKeyDown={handleKeyDown}
+                      autoFocus
+                    />
+                    {isSearching && (
+                      <div className="search-loading">Searching...</div>
+                    )}
+                    {showDropdown && (
+                      <div className="search-results-dropdown">
+                        {searchResults.slice(0, 5).map((result, index) => (
+                          <div
+                            key={result.address}
+                            className={`search-result-item ${
+                              index === selectedIndex ? 'selected' : ''
+                            }`}
+                            onClick={() => handleSelectResult(result.address)}
+                            onMouseEnter={() => setSelectedIndex(index)}
+                          >
+                            <div className="search-result-name">{result.name}</div>
+                            <div className="search-result-address">
+                              {result.address}
+                            </div>
+                          </div>
+                        ))}
+                        {searchResults.length > 5 && (
+                          <div className="search-result-more">
+                            +{searchResults.length - 5} more results
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {mode === 'group' && (
+                    <button
+                      className="modal-create-btn"
+                      onClick={handleSubmit}
+                      disabled={!recipientInput.trim()}
+                      style={{ flexShrink: 0 }}
+                    >
+                      Add member
+                    </button>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+        {mode === 'dm' && (
+          <div className="modal-footer">
+            <button
+              className="modal-create-btn"
+              onClick={handleSubmit}
+              disabled={!recipientInput.trim()}
+            >
+              Create
+            </button>
           </div>
-        </div>
-        <div className="modal-footer">
-          <button
-            className="modal-create-btn"
-            onClick={handleSubmit}
-            disabled={!recipientInput.trim()}
-          >
-            Create
-          </button>
-        </div>
+        )}
       </div>
     </div>
   );
