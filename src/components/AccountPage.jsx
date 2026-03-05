@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
+import { getProfileByAddress } from "../helpers/circlesRpcCall";
 
 function AccountPage({
   xmtpClient,
@@ -39,28 +40,9 @@ function AccountPage({
       setCirclesError(null);
 
       try {
-        const response = await fetch("https://rpc.aboutcircles.com/", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: 1,
-            method: "circles_getProfileByAddress",
-            params: [address],
-          }),
-        });
-
-        const data = await response.json();
-
-        if (data.result && Object.keys(data.result).length > 0) {
-          setCirclesProfile(data.result);
-        } else {
-          setCirclesProfile(null);
-        }
+        const profile = await getProfileByAddress(address);
+        setCirclesProfile(profile);
       } catch (error) {
-        console.error("Error fetching Circles profile:", error);
         setCirclesError("Failed to fetch Circles profile");
       } finally {
         setCirclesLoading(false);
@@ -284,24 +266,6 @@ function AccountPage({
         {activeTab === "settings" && (
           <div className="settings-section">
             <h2>Settings</h2>
-            <div className="settings-list">
-              <div className="setting-item">
-                <div className="setting-info">
-                  <span className="setting-label">Circles mode(WIP)</span>
-                  <span className="setting-description">
-                    Enabled functionalities powered by Circles
-                  </span>
-                </div>
-                <label className="toggle-switch">
-                  <input
-                    type="checkbox"
-                    checked={circlesMode}
-                    onChange={onCirclesModeToggle}
-                  />
-                  <span className="toggle-slider"></span>
-                </label>
-              </div>
-            </div>
           </div>
         )}
       </div>

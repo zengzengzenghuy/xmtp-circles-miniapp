@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useMetadata } from "../stores/inboxHooks";
+import { getProfileByAddress } from "../helpers/circlesRpcCall";
 
 // Component to display conversation with metadata
 function ConversationItem({
@@ -60,26 +61,8 @@ function ConversationItem({
       setCirclesLoading(true);
 
       try {
-        const response = await fetch("https://rpc.aboutcircles.com/", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: 1,
-            method: "circles_getProfileByAddress",
-            params: [fullAddress],
-          }),
-        });
-
-        const data = await response.json();
-
-        if (data.result && Object.keys(data.result).length > 0) {
-          setCirclesProfile(data.result);
-        } else {
-          setCirclesProfile(null);
-        }
+        const profile = await getProfileByAddress(fullAddress);
+        setCirclesProfile(profile);
       } catch (error) {
         console.error("Error fetching Circles profile:", error);
         setCirclesProfile(null);

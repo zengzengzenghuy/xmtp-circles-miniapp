@@ -5,7 +5,7 @@ import ConversationList from "./components/ConversationList";
 import MessageArea from "./components/MessageArea";
 import BottomTabs from "./components/BottomTabs";
 import AccountPage from "./components/AccountPage";
-import ChattingRoom from "./components/ChattingRoom";
+import CirclesGroup from "./components/CirclesGroup";
 import Arcade from "./components/Arcade";
 import NewConversationModal from "./components/NewConversationModal";
 import { parseInviteFromSearch } from "./components/arcade/helpers/invite";
@@ -391,7 +391,7 @@ function App() {
             </div>
           )
         ) : activeTab === "chatting-room" ? (
-          <ChattingRoom />
+          <CirclesGroup address={effectiveAddress} />
         ) : activeTab === "arcade" ? (
           <Arcade
             address={effectiveAddress}
