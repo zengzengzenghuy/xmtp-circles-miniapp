@@ -25,6 +25,10 @@ export const useConversations = () => {
   return useInboxStore((state) => state.sortedConversations);
 };
 
+export const useLastMessage = (conversationId) => {
+  return useInboxStore((state) => state.lastMessages.get(conversationId));
+};
+
 export const useLastCreatedAt = () => {
   return useInboxStore((state) => state.lastCreatedAt);
 };

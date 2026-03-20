@@ -53,6 +53,52 @@ function formatSummaryLabel(value) {
   return normalized ? normalized.charAt(0).toUpperCase() + normalized.slice(1) : "";
 }
 
+function getArcadeHeroContent(phase, gameLabel) {
+  switch (phase) {
+    case PHASE.PAYMENT_SELECT:
+      return {
+        title: "Session payment",
+        subtitle: "Choose how this match should be funded.",
+      };
+    case PHASE.PAYMENT_WAIT:
+      return {
+        title: "Waiting for payment",
+        subtitle: "Finish the transfer, then return here.",
+      };
+    case PHASE.SETUP:
+      return {
+        title: gameLabel ? `${gameLabel} setup` : "Game setup",
+        subtitle: "Lock in your hidden setup before the match starts.",
+      };
+    case PHASE.CREATE_INVITE:
+      return {
+        title: "Invite ready",
+        subtitle: "Share the link and wait for your opponent.",
+      };
+    case PHASE.JOIN_INVITE:
+      return {
+        title: "Join match",
+        subtitle: "Review the invite and jump in.",
+      };
+    case PHASE.PLAYING:
+      return {
+        title: gameLabel ? `${gameLabel} match` : "Match in progress",
+        subtitle: "Private play over XMTP direct messages.",
+      };
+    case PHASE.RESULT:
+      return {
+        title: "Match result",
+        subtitle: "Review the outcome and start another round.",
+      };
+    case PHASE.HOME:
+    default:
+      return {
+        title: "Arcade duels",
+        subtitle: "Challenge a friend to a fast private games powered by your Circles wallet and XMTP.",
+      };
+  }
+}
+
 function getBillingFromInvite(invite) {
   if (invite?.publicConfig?.billing?.mode === "paid") {
     return invite.publicConfig.billing;
@@ -202,19 +248,19 @@ export default function Arcade({
         invite,
         session: invite
           ? {
-              sessionId: invite.sessionId,
-              gameKey: invite.gameKey,
-              role: "joiner",
-              creatorAddress: invite.creatorAddress,
-              creatorCommitment: invite.creatorCommitment,
-              publicConfig: invite.publicConfig || {},
-            }
+            sessionId: invite.sessionId,
+            gameKey: invite.gameKey,
+            role: "joiner",
+            creatorAddress: invite.creatorAddress,
+            creatorCommitment: invite.creatorCommitment,
+            publicConfig: invite.publicConfig || {},
+          }
           : {
-              sessionId: createSessionId(address),
-              gameKey,
-              role: "creator",
-              creatorAddress: address,
-            },
+            sessionId: createSessionId(address),
+            gameKey,
+            role: "creator",
+            creatorAddress: address,
+          },
         info: invite
           ? "Choose how you want to join this paid session."
           : `Complete payment before ${game.label} setup unlocks.`,
@@ -589,12 +635,13 @@ export default function Arcade({
     [actions],
   );
 
-  const handleContinueFromHome = useCallback(() => {
-    if (state.selectedGameKey) {
+  const handleContinueFromHome = useCallback((gameKeyOverride) => {
+    const nextGameKey = gameKeyOverride || state.selectedGameKey;
+    if (nextGameKey) {
       if (arcadeConfig.paidMode) {
-        preparePaidFlow(state.selectedGameKey, "creator");
+        preparePaidFlow(nextGameKey, "creator");
       } else {
-        initializeForGame(state.selectedGameKey);
+        initializeForGame(nextGameKey);
       }
     }
   }, [
@@ -653,13 +700,13 @@ export default function Arcade({
         session:
           actor === "creator"
             ? {
-                role: "creator",
-                creatorAddress: state.address,
-              }
+              role: "creator",
+              creatorAddress: state.address,
+            }
             : {
-                role: "joiner",
-                joinerAddress: state.address,
-              },
+              role: "joiner",
+              joinerAddress: state.address,
+            },
         payment: {
           mode: "paid",
           actor,
@@ -792,14 +839,14 @@ export default function Arcade({
       const billing =
         state.payment.mode === "paid"
           ? {
-              mode: "paid",
-              creatorFeeCrc: state.payment.amountCrc,
-              inviteeFeeCrc: 1,
-              inviteeCanPlayFree: true,
-            }
+            mode: "paid",
+            creatorFeeCrc: state.payment.amountCrc,
+            inviteeFeeCrc: 1,
+            inviteeCanPlayFree: true,
+          }
           : {
-              mode: "free",
-            };
+            mode: "free",
+          };
       actions.setCommittedSetup({
         commitment: built.commitment,
         secretState: built.secretState,
@@ -1178,23 +1225,42 @@ export default function Arcade({
     }
   }
 
+  const heroContent = getArcadeHeroContent(
+    state.phase,
+    selectedGame?.label || "",
+  );
+
   return (
     <div className="arcade-page">
       <div className="arcade-shell">
-        {state.error ? <div className="banner error">{state.error}</div> : null}
-        {state.phase !== PHASE.HOME || state.recovery.available ? (
-          <div className="arcade-shell-actions">
-            <button
-              type="button"
-              className="ghost-btn"
-              onClick={() => {
-                void handleResetArcade();
-              }}
-            >
-              Reset arcade
-            </button>
+        <section className="arcade-hero">
+          <div className="arcade-hero-copy">
+            <span className="arcade-hero-eyebrow">Arcade</span>
+            <h1>{heroContent.title}</h1>
+            <p>{heroContent.subtitle}</p>
+          </div>
+          {(state.phase !== PHASE.HOME || state.recovery.available) && (
+            <div className="arcade-shell-actions">
+              <button
+                type="button"
+                className="ghost-btn"
+                onClick={() => {
+                  void handleResetArcade();
+                }}
+              >
+                Reset arcade
+              </button>
+            </div>
+          )}
+        </section>
+
+        {selectedGame ? (
+          <div className="arcade-chip-row">
+            <div className="arcade-chip accent">{selectedGame.label}</div>
           </div>
         ) : null}
+
+        {state.error ? <div className="banner error">{state.error}</div> : null}
         {content}
       </div>
     </div>

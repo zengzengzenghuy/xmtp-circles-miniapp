@@ -13,12 +13,25 @@ export default function ArcadeHome({
   onResetArcade,
   onOpenAccount,
 }) {
+  const handlePickGame = (gameKey) => {
+    onSelectGame(gameKey);
+
+    if (
+      connected &&
+      hasXmtp &&
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 768px)").matches
+    ) {
+      onContinue(gameKey);
+    }
+  };
+
   return (
     <div className="screen screen-stack-tight">
       {recoverySummary ? (
         <section className="panel section-intro">
           <p className="eyebrow">Saved session</p>
-          <h2>Resume your last arcade session?</h2>
+          <h2>Resume your last match?</h2>
           <p className="muted">
             {recoverySummary.gameLabel} · {recoverySummary.phaseLabel}
             {recoverySummary.statusLabel ? ` · ${recoverySummary.statusLabel}` : ""}
@@ -42,42 +55,20 @@ export default function ArcadeHome({
         </section>
       ) : null}
 
-      <section className="panel section-intro">
-        <p className="eyebrow">Arcade</p>
-        <h2>Pick a game and start a private XMTP match.</h2>
-        <p className="muted">
-          This arcade flow is fully offchain. Setup, invitation, gameplay, and
-          results all happen through direct XMTP messages.
-        </p>
-      </section>
-
-      <div className="panel-grid arcade-status-grid">
-        <div className="panel summary-card">
-          <p className="eyebrow">Wallet</p>
-          <h2>{connected ? "Connected" : "Not connected"}</h2>
-          <p className="muted">
-            {connected
-              ? "Wallet is ready for arcade sessions."
-              : "Connect your wallet first."}
-          </p>
-        </div>
-
-        <div className="panel summary-card">
-          <p className="eyebrow">XMTP</p>
-          <h2>{hasXmtp ? "Ready" : "Inbox required"}</h2>
-          <p className="muted">
-            {hasXmtp
-              ? "Your XMTP inbox is ready to send game messages."
-              : "Create or connect your XMTP inbox before playing."}
-          </p>
-        </div>
-      </div>
-
       <GamePicker
         games={games}
         selectedGameKey={selectedGameKey}
-        onSelectGame={onSelectGame}
+        onSelectGame={handlePickGame}
       />
+
+      {!connected || !hasXmtp ? (
+        <div className="panel panel-muted">
+          <p className="eyebrow">Setup needed</p>
+          <p className="muted">
+            Connect your wallet and XMTP inbox before starting a match.
+          </p>
+        </div>
+      ) : null}
 
       {!connected || !hasXmtp ? (
         <button
@@ -95,7 +86,7 @@ export default function ArcadeHome({
         disabled={!selectedGameKey || !connected || !hasXmtp}
         onClick={onContinue}
       >
-        Continue to setup
+        Continue
       </button>
     </div>
   );

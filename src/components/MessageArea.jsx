@@ -1,14 +1,20 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { useAccount } from "wagmi";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useConversation } from "../hooks/useConversation";
 import { useMetadata } from "../stores/inboxHooks";
 import { getProfileByAddress } from "../helpers/circlesRpcCall";
+import {
+  formatMessageTimestamp,
+  getMessageText,
+  isRenderableMessage,
+} from "../helpers/messageContent";
 
 function MessageArea({ conversation, xmtpClient, onBack, className }) {
-  const { address } = useAccount();
   const [inputValue, setInputValue] = useState("");
   const [circlesProfile, setCirclesProfile] = useState(null);
-  const [circlesLoading, setCirclesLoading] = useState(false);
+  const [composerError, setComposerError] = useState("");
+  const messagesEndRef = useRef(null);
+  const textareaRef = useRef(null);
+  const previousMessageCountRef = useRef(0);
 
   // Get metadata for the conversation
   const metadata = useMetadata(conversation?.id || "");
@@ -41,16 +47,12 @@ function MessageArea({ conversation, xmtpClient, onBack, className }) {
         return;
       }
 
-      setCirclesLoading(true);
-
       try {
         const profile = await getProfileByAddress(fullAddress);
         setCirclesProfile(profile);
       } catch (error) {
         console.error("Error fetching Circles profile:", error);
         setCirclesProfile(null);
-      } finally {
-        setCirclesLoading(false);
       }
     };
 
@@ -60,6 +62,9 @@ function MessageArea({ conversation, xmtpClient, onBack, className }) {
   // Load messages when conversation changes
   useEffect(() => {
     if (!conversation) return;
+    setComposerError("");
+    setInputValue("");
+    previousMessageCountRef.current = 0;
 
     const loadMessages = async () => {
       try {
@@ -74,23 +79,45 @@ function MessageArea({ conversation, xmtpClient, onBack, className }) {
     loadMessages();
   }, [conversation, sync]);
 
-  const handleSend = useCallback(async () => {
-    if (!inputValue.trim() || !conversation || isSending) return;
+  const visibleMessages = useMemo(
+    () => messages.filter(isRenderableMessage),
+    [messages],
+  );
 
+  const handleSend = useCallback(async () => {
+    const text = inputValue.trim();
+    if (!text || !conversation || isSending) return;
+
+    setComposerError("");
     try {
-      // Send text message using the hook's sendText method
-      await sendText(inputValue);
+      await sendText(text);
       setInputValue("");
+      await sync();
     } catch (error) {
       console.error("Error sending message:", error);
-      alert(`Failed to send message: ${error.message}`);
+      setComposerError(error.message || "Failed to send message");
     }
-  }, [inputValue, conversation, isSending, sendText]);
+  }, [inputValue, conversation, isSending, sendText, sync]);
 
-  const handleKeyPress = (e) => {
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    const behavior = previousMessageCountRef.current > 0 ? "smooth" : "auto";
+    messagesEndRef.current?.scrollIntoView({ behavior });
+    previousMessageCountRef.current = visibleMessages.length;
+  }, [visibleMessages]);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    textarea.style.height = "0px";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
+  }, [inputValue]);
+
+  const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      void handleSend();
     }
   };
 
@@ -100,7 +127,7 @@ function MessageArea({ conversation, xmtpClient, onBack, className }) {
         <div className="no-conversation">
           <div className="no-conversation-content">
             <h2>Select a conversation</h2>
-            <p>Choose a conversation from the list to start messaging</p>
+            <p>Pick a chat from the sidebar or start a new one</p>
           </div>
         </div>
       </div>
@@ -118,6 +145,7 @@ function MessageArea({ conversation, xmtpClient, onBack, className }) {
 
   // Determine display name - use Circles profile name if available
   const displayName = circlesProfile?.name || peerAddress;
+  const fullAddress = getFullPeerAddress();
 
   // Get avatar initials safely - for addresses, skip the "0x" prefix
   const getAvatarText = () => {
@@ -150,6 +178,9 @@ function MessageArea({ conversation, xmtpClient, onBack, className }) {
         )}
         <div className="header-info">
           <span className="header-address">{displayName}</span>
+          {circlesProfile?.name && fullAddress && (
+            <span className="header-subtitle">{fullAddress}</span>
+          )}
         </div>
       </div>
 
@@ -158,7 +189,7 @@ function MessageArea({ conversation, xmtpClient, onBack, className }) {
           <div className="no-messages">
             <p>Loading messages...</p>
           </div>
-        ) : messages.length === 0 ? (
+        ) : visibleMessages.length === 0 ? (
           <div className="no-messages">
             <p>No messages yet</p>
             <p className="no-messages-hint">
@@ -166,43 +197,9 @@ function MessageArea({ conversation, xmtpClient, onBack, className }) {
             </p>
           </div>
         ) : (
-          messages
-            .filter((message) => {
-              // Filter out system messages (membership updates, etc.)
-              // System messages typically have structured objects with fields like
-              // addedInboxes, removedInboxes, etc.
-              if (typeof message.content === "object" && message.content !== null) {
-                // Check if it's a membership/system message by looking for specific fields
-                if (
-                  message.content.addedInboxes ||
-                  message.content.removedInboxes ||
-                  message.content.initiatedByInboxId
-                ) {
-                  return false; // Skip system messages
-                }
-              }
-              return true; // Show all other messages
-            })
-            .map((message) => {
+          visibleMessages.map((message) => {
               const isSent = message.senderInboxId === xmtpClient?.inboxId;
-              const timestamp = new Date(Number(message.sentAtNs) / 1_000_000);
-
-              // Decode message content
-              let messageText = "";
-              if (typeof message.content === "string") {
-                messageText = message.content;
-              } else if (message.content instanceof Uint8Array) {
-                messageText = new TextDecoder().decode(message.content);
-              } else if (message.content?.content) {
-                // If content is an object with a content property
-                if (message.content.content instanceof Uint8Array) {
-                  messageText = new TextDecoder().decode(message.content.content);
-                } else {
-                  messageText = String(message.content.content);
-                }
-              } else {
-                messageText = JSON.stringify(message.content);
-              }
+              const messageText = getMessageText(message.content);
 
               return (
                 <div
@@ -211,35 +208,45 @@ function MessageArea({ conversation, xmtpClient, onBack, className }) {
                   <div className="message-content">
                     <div className="message-text">{messageText}</div>
                     <div className="message-timestamp">
-                      {timestamp.toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
+                      {formatMessageTimestamp(message.sentAtNs)}
                     </div>
                   </div>
                 </div>
               );
             })
         )}
+        <div ref={messagesEndRef} />
       </div>
 
       <div className="message-input-container">
         <textarea
+          ref={textareaRef}
           className="message-input"
-          placeholder="Type a message..."
+          placeholder="Message"
           value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          onKeyPress={handleKeyPress}
+          onChange={(e) => {
+            setInputValue(e.target.value);
+            if (composerError) {
+              setComposerError("");
+            }
+          }}
+          onKeyDown={handleKeyDown}
           rows="1"
           disabled={isSending}
         />
         <button
           className="send-btn"
-          onClick={handleSend}
-          disabled={!inputValue.trim() || isSending}>
-          {isSending ? "Sending..." : "Send"}
+          onClick={() => void handleSend()}
+          disabled={!inputValue.trim() || isSending}
+          aria-label="Send">
+          <svg width="24" height="24" viewBox="0 0 24 24">
+            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" fill="currentColor" />
+          </svg>
         </button>
       </div>
+      {composerError && (
+        <div className="message-input-error">{composerError}</div>
+      )}
     </div>
   );
 }

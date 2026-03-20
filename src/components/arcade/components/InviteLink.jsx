@@ -21,7 +21,7 @@ export default function InviteLink({ inviteLink }) {
     <div className="panel invite-panel">
       <div className="card-header">
         <p className="eyebrow">Invite</p>
-        <h2>Share the match link.</h2>
+        <h2>Share the link.</h2>
       </div>
       <div className="value-block">
         <code className="invite-link-code">{inviteLink}</code>

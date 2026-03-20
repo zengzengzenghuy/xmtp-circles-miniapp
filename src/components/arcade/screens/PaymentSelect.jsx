@@ -3,8 +3,6 @@ import React from "react";
 export default function PaymentSelect({
   actor,
   selectedGame,
-  billing,
-  recipientAddress,
   configError,
   onCreatorHalf,
   onCreatorFull,
@@ -21,25 +19,15 @@ export default function PaymentSelect({
         <p className="eyebrow">Payment</p>
         <h2>
           {isCreator
-            ? "Choose how you want to fund this session."
-            : "This session supports an optional contribution."}
+            ? "Choose a payment option."
+            : "Choose how you want to join."}
         </h2>
         <p className="muted">
           {isCreator
-            ? `Paid mode is enabled for ${selectedGame?.label || "this game"}. You will be redirected to the Gnosis transfer flow before setup unlocks.`
-            : `The creator selected a paid session for ${selectedGame?.label || "this game"}. You can contribute 1 CRC or join for free.`}
+            ? `${selectedGame?.label || "This game"} can use a paid entry before setup unlocks.`
+            : `${selectedGame?.label || "This game"} supports an optional 1 CRC contribution.`}
         </p>
       </section>
-
-      <div className="panel panel-muted">
-        <p className="eyebrow">Recipient organization</p>
-        <code>{recipientAddress || "Not configured"}</code>
-        {!isCreator && billing?.creatorFeeCrc ? (
-          <p className="muted">
-            Creator contribution: {billing.creatorFeeCrc} CRC
-          </p>
-        ) : null}
-      </div>
 
       {payDisabledReason ? (
         <div className="banner error">{payDisabledReason}</div>
@@ -54,7 +42,7 @@ export default function PaymentSelect({
               disabled={Boolean(payDisabledReason)}
               onClick={onCreatorHalf}
             >
-              1 CRC pay half fee
+              Pay 1 CRC
             </button>
             <button
               type="button"
@@ -62,7 +50,7 @@ export default function PaymentSelect({
               disabled={Boolean(payDisabledReason)}
               onClick={onCreatorFull}
             >
-              2 CRC pay full fee
+              Pay 2 CRC
             </button>
           </>
         ) : (

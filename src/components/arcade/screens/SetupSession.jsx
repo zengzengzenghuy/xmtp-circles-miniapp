@@ -22,8 +22,8 @@ export default function SetupSession({
         <h2>{selectedGame.label}</h2>
         <p className="muted">
           {invite
-            ? "Commit your hidden setup before joining the session."
-            : "Commit your hidden setup before sharing the invite."}
+            ? "Lock in your hidden setup before joining."
+            : "Lock in your hidden setup before sharing the invite."}
         </p>
       </div>
 

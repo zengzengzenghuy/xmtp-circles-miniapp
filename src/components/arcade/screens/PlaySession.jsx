@@ -27,7 +27,7 @@ export default function PlaySession({
           onClick={onResign}
           disabled={isResigning}
         >
-          {isResigning ? "Resigning..." : "Resign session"}
+          {isResigning ? "Resigning..." : "Resign"}
         </button>
       </div>
       <PlayScreen
