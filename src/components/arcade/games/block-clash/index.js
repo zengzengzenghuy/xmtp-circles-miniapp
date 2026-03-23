@@ -19,7 +19,7 @@ import ResultPanel from './screens/ResultPanel.jsx';
 export const gameDefinition = {
   key: GAME_KEYS.BLOCK_CLASH,
   label: 'Block Clash',
-  description: 'Choose a hidden piece loadout, take turns placing tetromino-like shapes, and trap the other side.',
+  description: 'Draft hidden pieces and trap your opponent.',
   moveStyle: 'fire-and-forget',
   moveType: 'BLOCK_MOVE',
 

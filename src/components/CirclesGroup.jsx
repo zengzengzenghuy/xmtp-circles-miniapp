@@ -326,7 +326,7 @@ function CirclesGroup({ address }) {
           </div>
         ) : error ? (
           <div className="placeholder-content">
-            <p style={{ color: "#d32f2f" }}>{error}</p>
+            <p style={{ color: "var(--error-ink)" }}>{error}</p>
           </div>
         ) : !address ? (
           <div className="placeholder-content">
@@ -385,7 +385,7 @@ function CirclesGroup({ address }) {
             </div>
             <div className="modal-body">
               {createError && (
-                <div style={{ color: "#d32f2f", marginBottom: "1rem" }}>
+                <div style={{ color: "var(--error-ink)", marginBottom: "1rem" }}>
                   {createError}
                 </div>
               )}

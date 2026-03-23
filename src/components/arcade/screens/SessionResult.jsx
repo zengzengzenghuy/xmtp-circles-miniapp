@@ -61,7 +61,7 @@ export default function SessionResult({
           className="ghost-btn full-width-mobile"
           onClick={onReset}
         >
-          Back to arcade
+          Back
         </button>
       </div>
     </div>

@@ -5,7 +5,7 @@ import ConversationList from "./components/ConversationList";
 import MessageArea from "./components/MessageArea";
 import BottomTabs from "./components/BottomTabs";
 import AccountPage from "./components/AccountPage";
-import CirclesGroup from "./components/CirclesGroup";
+// import CirclesGroup from "./components/CirclesGroup"; // Hidden: groups feature
 import Arcade from "./components/Arcade";
 import NewConversationModal from "./components/NewConversationModal";
 import { parseInviteFromSearch } from "./components/arcade/helpers/invite";
@@ -290,37 +290,39 @@ function App() {
   const handleCreateConversation = async (recipientAddress) => {
     if (!xmtpClient) {
       console.error("XMTP client not available");
-      return;
+      throw new Error("XMTP client not available");
     }
 
-    try {
-      // Check if the recipient address is valid (basic validation)
-      if (!recipientAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
-        console.error("Invalid Ethereum address");
-        alert("Please enter a valid Ethereum address");
-        return;
-      }
+    const normalizedAddress = recipientAddress.trim();
 
-      console.log("Creating DM with:", recipientAddress);
-
-      // Use the hook to create DM with address
-      const dm = await createDmWithAddress(recipientAddress);
-
-      // if (!dm) {
-      //   alert("This address is not registered on the XMTP network");
-      //   return;
-      // }
-
-      console.log("DM created/retrieved:", dm);
-
-      // Select the new conversation
-      setSelectedConversation(dm);
-
-      console.log("Conversation selected:", dm);
-    } catch (error) {
-      console.error("Error creating conversation:", error);
-      alert(`Failed to create conversation: ${error.message}`);
+    // Check if the recipient address is valid (basic validation)
+    if (!normalizedAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
+      console.error("Invalid Ethereum address");
+      throw new Error("Please enter a valid Ethereum address");
     }
+
+    if (
+      effectiveAddress &&
+      normalizedAddress.toLowerCase() === effectiveAddress.toLowerCase()
+    ) {
+      throw new Error("You cannot start a chat with your own wallet");
+    }
+
+    console.log("Creating DM with:", normalizedAddress);
+
+    // Use the hook to create DM with address
+    const dm = await createDmWithAddress(normalizedAddress);
+
+    if (!dm) {
+      throw new Error("This address is not registered on the XMTP network");
+    }
+
+    console.log("DM created/retrieved:", dm);
+
+    // Select the new conversation
+    setSelectedConversation(dm);
+
+    console.log("Conversation selected:", dm);
   };
 
   // Format address for display
@@ -331,43 +333,41 @@ function App() {
 
   return (
     <div className="app">
-      <header className="app-header">
-        <div className="header-content">
-          <div className="header-left">
-            <h1>XMTP Chat</h1>
-            {effectiveConnected && effectiveAddress && (
-              <div className="connected-address">
-                <span className="address-value">
-                  {formatAddress(effectiveAddress)}
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
-
       <div className="app-content">
         {activeTab === "chat" ? (
           !effectiveConnected ? (
             <div className="connect-prompt">
               <div className="connect-card">
                 <h2>Welcome to XMTP Chat</h2>
-                <p>Connect your wallet to start messaging</p>
-                <p className="connect-hint">
-                  {isMiniapp
-                    ? "Waiting for host wallet connection..."
-                    : "Go to Account tab to connect your wallet"}
-                </p>
+                <p>Secure, wallet-to-wallet messaging</p>
+                <button
+                  className="connect-btn-large"
+                  onClick={() => setActiveTab("account")}>
+                  Connect Wallet
+                </button>
+                {isMiniapp && (
+                  <p className="connect-hint">
+                    Waiting for host wallet connection...
+                  </p>
+                )}
               </div>
             </div>
           ) : !xmtpClient ? (
             <div className="connect-prompt">
               <div className="connect-card">
-                <h2>Connect to XMTP</h2>
-                <p>Create your XMTP inbox ID to start messaging</p>
-                <p className="connect-hint">
-                  Go to Account tab to connect to XMTP
-                </p>
+                <h2>Almost there!</h2>
+                <p>Sign a message to activate your XMTP inbox</p>
+                <button
+                  className="connect-btn-large"
+                  onClick={handleCreateInbox}
+                  disabled={isCreatingInbox}>
+                  {isCreatingInbox ? "Connecting..." : "Activate Inbox"}
+                </button>
+                {inboxError && (
+                  <p className="connect-hint" style={{ color: "var(--error-ink)", marginTop: "1rem", fontSize: "0.85rem" }}>
+                    {inboxError}
+                  </p>
+                )}
               </div>
             </div>
           ) : (
@@ -390,8 +390,6 @@ function App() {
               />
             </div>
           )
-        ) : activeTab === "chatting-room" ? (
-          <CirclesGroup address={effectiveAddress} />
         ) : activeTab === "arcade" ? (
           <Arcade
             address={effectiveAddress}

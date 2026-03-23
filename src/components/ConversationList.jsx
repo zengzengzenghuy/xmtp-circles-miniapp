@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { useMetadata } from "../stores/inboxHooks";
+import { useLastMessage, useMetadata } from "../stores/inboxHooks";
 import { getProfileByAddress } from "../helpers/circlesRpcCall";
+import {
+  formatConversationTimestamp,
+  getMessageText,
+} from "../helpers/messageContent";
 
 // Component to display conversation with metadata
 function ConversationItem({
@@ -11,7 +15,7 @@ function ConversationItem({
 }) {
   const metadata = useMetadata(conversation.id);
   const [circlesProfile, setCirclesProfile] = useState(null);
-  const [circlesLoading, setCirclesLoading] = useState(false);
+  const lastMessage = useLastMessage(conversation.id);
 
   // Helper to get full peer address (not truncated)
   const getFullPeerAddress = () => {
@@ -58,16 +62,12 @@ function ConversationItem({
         return;
       }
 
-      setCirclesLoading(true);
-
       try {
         const profile = await getProfileByAddress(fullAddress);
         setCirclesProfile(profile);
       } catch (error) {
         console.error("Error fetching Circles profile:", error);
         setCirclesProfile(null);
-      } finally {
-        setCirclesLoading(false);
       }
     };
 
@@ -84,12 +84,13 @@ function ConversationItem({
       : "??";
   };
   const avatarText = getAvatarText();
+  const lastActivityNs = lastMessage?.sentAtNs || conversation.createdAtNs;
+  const previewText = getMessageText(lastMessage?.content) || "No messages yet";
 
   return (
     <div
-      className={`conversation-item ${
-        selectedConversation?.id === conversation.id ? "active" : ""
-      }`}
+      className={`conversation-item ${selectedConversation?.id === conversation.id ? "active" : ""
+        }`}
       onClick={() => onSelectConversation(conversation)}>
       {circlesProfile && circlesProfile.previewImageUrl ? (
         <img
@@ -110,14 +111,10 @@ function ConversationItem({
                 : peerAddress}
           </span>
           <span className="conversation-time">
-            {new Date(
-              Number(conversation.createdAtNs) / 1_000_000
-            ).toLocaleDateString()}
+            {formatConversationTimestamp(lastActivityNs)}
           </span>
         </div>
-        <div className="conversation-preview">
-          {conversation.lastMessage?.content || "No messages yet"}
-        </div>
+        <div className="conversation-preview">{previewText}</div>
       </div>
     </div>
   );
@@ -137,19 +134,27 @@ function ConversationList({
   return (
     <div className={`conversation-list${className ? ` ${className}` : ''}`}>
       <div className="conversation-list-header">
-        <h2>Messages</h2>
-        <div style={{ display: "flex", gap: "0.5rem" }}>
+        <h2>Circles Messages</h2>
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
           {onRefresh && (
             <button
               className="refresh-btn"
-              onClick={onRefresh}
+              onClick={() => onRefresh(true)}
               disabled={isLoading}
               title="Sync conversations">
-              ↻
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 2v6h-6" />
+                <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+                <path d="M3 22v-6h6" />
+                <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+              </svg>
             </button>
           )}
-          <button className="new-message-btn" onClick={onNewConversation}>
-            +
+          <button className="new-message-btn" onClick={onNewConversation} aria-label="New message">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
           </button>
         </div>
       </div>
@@ -162,7 +167,11 @@ function ConversationList({
         ) : conversations.length === 0 ? (
           <div className="empty-state">
             <p>No conversations yet</p>
-            <p className="empty-hint">Click + to start a new conversation</p>
+            <button
+              className="empty-state-action"
+              onClick={onNewConversation}>
+              Start a conversation
+            </button>
           </div>
         ) : (
           conversations.map((conversation) => (

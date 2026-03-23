@@ -1,23 +1,33 @@
 import React, { useState, useEffect, useRef } from 'react';
 
+const ADDRESS_PATTERN = /^0x[a-fA-F0-9]{40}$/;
+
 function NewConversationModal({ isOpen, onClose, onCreateConversation }) {
-  const [mode, setMode] = useState(null); // null, 'dm', or 'group'
+  const [mode, setMode] = useState('dm'); // 'dm' by default (group mode hidden)
   const [recipientInput, setRecipientInput] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [groupMembers, setGroupMembers] = useState([]);
   const searchTimeoutRef = useRef(null);
+  const inputRef = useRef(null);
 
   // Reset state when modal opens/closes
   useEffect(() => {
     if (!isOpen) {
-      setMode(null);
+      setMode('dm');
       setRecipientInput('');
       setSearchResults([]);
       setIsSearching(false);
+      setIsSubmitting(false);
+      setSubmitError('');
       setSelectedIndex(-1);
       setGroupMembers([]);
+    } else {
+      // Focus input after mount
+      setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, [isOpen]);
 
@@ -58,10 +68,10 @@ function NewConversationModal({ isOpen, onClose, onCreateConversation }) {
       clearTimeout(searchTimeoutRef.current);
     }
 
-    // Set new timeout for 1 second
+    // Keep search responsive without spamming the API.
     searchTimeoutRef.current = setTimeout(() => {
       searchCirclesProfiles(recipientInput);
-    }, 1000);
+    }, 350);
 
     // Cleanup on unmount or when input changes
     return () => {
@@ -71,32 +81,58 @@ function NewConversationModal({ isOpen, onClose, onCreateConversation }) {
     };
   }, [recipientInput]);
 
-  const handleSelectResult = (address) => {
-    if (mode === 'group') {
-      // For group mode, add to members array
-      handleAddMember(address);
-    } else {
-      // For DM mode, create conversation immediately
-      onCreateConversation(address);
+  const submitRecipient = async (value) => {
+    const normalized = value.trim();
+
+    if (!normalized) {
+      return;
+    }
+
+    setSubmitError('');
+    setIsSubmitting(true);
+
+    try {
+      await onCreateConversation(normalized);
       setRecipientInput('');
       setSearchResults([]);
       onClose();
+    } catch (error) {
+      setSubmitError(error.message || 'Failed to start conversation');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleSubmit = () => {
-    if (recipientInput.trim()) {
-      if (mode === 'group') {
-        // For group mode, add to members array
-        handleAddMember(recipientInput.trim());
-      } else {
-        // For DM mode, create conversation immediately
-        onCreateConversation(recipientInput.trim());
-        setRecipientInput('');
-        setSearchResults([]);
-        onClose();
-      }
+  const handleSelectResult = async (address) => {
+    if (mode === 'group') {
+      handleAddMember(address);
+    } else {
+      await submitRecipient(address);
     }
+  };
+
+  const handleSubmit = async () => {
+    const trimmedRecipient = recipientInput.trim();
+    if (!trimmedRecipient) {
+      return;
+    }
+
+    if (mode === 'group') {
+      handleAddMember(trimmedRecipient);
+      return;
+    }
+
+    if (ADDRESS_PATTERN.test(trimmedRecipient)) {
+      await submitRecipient(trimmedRecipient);
+      return;
+    }
+
+    if (searchResults.length === 1) {
+      await submitRecipient(searchResults[0].address);
+      return;
+    }
+
+    setSubmitError('Select a profile from the list or paste a full 0x address.');
   };
 
   const handleAddMember = (address) => {
@@ -126,16 +162,17 @@ function NewConversationModal({ isOpen, onClose, onCreateConversation }) {
       } else if (e.key === 'Enter') {
         e.preventDefault();
         if (selectedIndex >= 0 && selectedIndex < searchResults.length) {
-          handleSelectResult(searchResults[selectedIndex].address);
+          void handleSelectResult(searchResults[selectedIndex].address);
         } else {
-          handleSubmit();
+          void handleSubmit();
         }
         return;
       }
     } else {
       // No dropdown - standard behavior
       if (e.key === 'Enter') {
-        handleSubmit();
+        e.preventDefault();
+        void handleSubmit();
       }
     }
 
@@ -143,7 +180,7 @@ function NewConversationModal({ isOpen, onClose, onCreateConversation }) {
       if (searchResults.length > 0) {
         setSearchResults([]);
         setSelectedIndex(-1);
-      } else {
+      } else if (!isSubmitting) {
         onClose();
       }
     }
@@ -151,132 +188,76 @@ function NewConversationModal({ isOpen, onClose, onCreateConversation }) {
 
   const handleInputChange = (e) => {
     setRecipientInput(e.target.value);
+    if (submitError) {
+      setSubmitError('');
+    }
     setSelectedIndex(-1); // Reset selection when typing
   };
 
   if (!isOpen) return null;
 
-  const showDropdown = searchResults.length > 0 && recipientInput.length >= 2;
-
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>New Message</h3>
-          <button className="modal-close-btn" onClick={onClose}>
-            ×
+    <div className="new-msg-overlay" onClick={() => !isSubmitting && onClose()}>
+      <div className="new-msg-panel" onClick={(e) => e.stopPropagation()}>
+        {/* Header with back + title */}
+        <div className="new-msg-header">
+          <button className="new-msg-back" onClick={onClose} aria-label="Back" disabled={isSubmitting}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 12H5" />
+              <path d="M12 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <h3 className="new-msg-title">New Message</h3>
+          <button
+            className="new-msg-go"
+            onClick={handleSubmit}
+            disabled={!recipientInput.trim() || isSubmitting}>
+            {isSubmitting ? 'Opening…' : 'Go'}
           </button>
         </div>
-        <div className="modal-body">
-          {mode === null ? (
-            // Mode selection view
-            <div className="mode-selection">
-              <button
-                className="mode-selection-btn"
-                onClick={() => setMode('dm')}
-              >
-                Add new dm
-              </button>
-              <button
-                className="mode-selection-btn"
-                onClick={() => setMode('group')}
-              >
-                Add new group chat
-              </button>
-            </div>
-          ) : (
-            // Search view (for both DM and Group)
-            <>
-              <div style={{ display: 'flex', alignItems: 'center', marginBottom: '0.5rem' }}>
-                <button
-                  className="back-btn"
-                  onClick={() => setMode(null)}
-                  style={{ marginRight: '0.5rem' }}
-                >
-                  ← Back
-                </button>
-                <label className="modal-label">
-                  {mode === 'group' ? 'Add Members' : 'Recipient'}
-                </label>
-              </div>
 
-              {mode === 'group' && groupMembers.length > 0 && (
-                <div className="group-members-list" style={{ marginBottom: '1rem' }}>
-                  <strong>Members ({groupMembers.length}):</strong>
-                  {groupMembers.map((member, index) => (
-                    <div key={index} style={{ fontSize: '0.9rem', marginTop: '0.25rem' }}>
-                      {member}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div className="search-input-container">
-                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}>
-                  <div style={{ flex: 1, position: 'relative' }}>
-                    <input
-                      type="text"
-                      className="modal-input"
-                      placeholder="Enter name or wallet address (0x...)"
-                      value={recipientInput}
-                      onChange={handleInputChange}
-                      onKeyDown={handleKeyDown}
-                      autoFocus
-                    />
-                    {isSearching && (
-                      <div className="search-loading">Searching...</div>
-                    )}
-                    {showDropdown && (
-                      <div className="search-results-dropdown">
-                        {searchResults.slice(0, 5).map((result, index) => (
-                          <div
-                            key={result.address}
-                            className={`search-result-item ${
-                              index === selectedIndex ? 'selected' : ''
-                            }`}
-                            onClick={() => handleSelectResult(result.address)}
-                            onMouseEnter={() => setSelectedIndex(index)}
-                          >
-                            <div className="search-result-name">{result.name}</div>
-                            <div className="search-result-address">
-                              {result.address}
-                            </div>
-                          </div>
-                        ))}
-                        {searchResults.length > 5 && (
-                          <div className="search-result-more">
-                            +{searchResults.length - 5} more results
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  {mode === 'group' && (
-                    <button
-                      className="modal-create-btn"
-                      onClick={handleSubmit}
-                      disabled={!recipientInput.trim()}
-                      style={{ flexShrink: 0 }}
-                    >
-                      Add member
-                    </button>
-                  )}
-                </div>
-              </div>
-            </>
-          )}
+        {/* Search input */}
+        <div className="new-msg-search">
+          <span className="new-msg-to">To:</span>
+          <input
+            ref={inputRef}
+            type="text"
+            className="new-msg-input"
+            placeholder="Name or 0x address..."
+            value={recipientInput}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+          />
+          {isSearching && <span className="new-msg-spinner">Searching…</span>}
         </div>
-        {mode === 'dm' && (
-          <div className="modal-footer">
-            <button
-              className="modal-create-btn"
-              onClick={handleSubmit}
-              disabled={!recipientInput.trim()}
-            >
-              Create
-            </button>
-          </div>
-        )}
+        {submitError && <div className="new-msg-error">{submitError}</div>}
+
+        {/* Results list - scrollable area */}
+        <div className="new-msg-results">
+          {searchResults.length > 0 ? (
+            searchResults.map((result, index) => (
+              <div
+                key={result.address}
+                className={`new-msg-result-item ${index === selectedIndex ? 'selected' : ''}`}
+                onClick={() => handleSelectResult(result.address)}
+                onMouseEnter={() => setSelectedIndex(index)}>
+                <div className="new-msg-result-avatar">
+                  {result.name ? result.name.slice(0, 2).toUpperCase() : '??'}
+                </div>
+                <div className="new-msg-result-info">
+                  <div className="new-msg-result-name">{result.name}</div>
+                  <div className="new-msg-result-addr">
+                    {result.address.slice(0, 6)}...{result.address.slice(-4)}
+                  </div>
+                </div>
+              </div>
+            ))
+          ) : recipientInput.length >= 2 && !isSearching && !recipientInput.startsWith('0x') ? (
+            <div className="new-msg-empty">No results found</div>
+          ) : !recipientInput ? (
+            <div className="new-msg-empty">Search for a name or paste an address</div>
+          ) : null}
+        </div>
       </div>
     </div>
   );

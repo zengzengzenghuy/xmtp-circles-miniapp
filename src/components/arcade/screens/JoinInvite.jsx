@@ -9,31 +9,21 @@ export default function JoinInvite({
   onJoin,
   onOpenAccount,
 }) {
+  const creatorLabel = invite?.creatorAddress
+    ? `${invite.creatorAddress.slice(0, 6)}...${invite.creatorAddress.slice(-4)}`
+    : "Unknown";
+
   return (
     <div className="screen screen-stack-tight">
       <section className="panel section-intro">
         <p className="eyebrow">Join session</p>
         <h2>Join {selectedGame?.label || "arcade game"}.</h2>
-        <p className="muted">
-          Your setup is committed locally. Joining now sends the session
-          handshake to the creator over XMTP.
-        </p>
+        <p className="muted">Match created by {creatorLabel}.</p>
       </section>
-
-      <div className="panel-grid inline-meta-grid">
-        <div className="panel">
-          <p className="eyebrow">Creator</p>
-          <code>{invite.creatorAddress}</code>
-        </div>
-        <div className="panel">
-          <p className="eyebrow">Session ID</p>
-          <code>{invite.sessionId}</code>
-        </div>
-      </div>
 
       {summary.length ? (
         <div className="panel panel-muted">
-          <p className="eyebrow">Your setup summary</p>
+          <p className="eyebrow">Your setup</p>
           <ul className="check-list">
             {summary.map((item) => (
               <li key={item}>{item}</li>
@@ -60,7 +50,7 @@ export default function JoinInvite({
         disabled={!canJoin}
         onClick={onJoin}
       >
-        Join session
+        Join
       </button>
     </div>
   );
