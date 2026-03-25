@@ -66,17 +66,18 @@ export const useInboxStore = create((set, get) => ({
 
     const newMetadata = new Map(state.metadata);
 
-    // Get peer inbox ID for reference
-    const peerInboxId = conversation.isDm ? await conversation.peerInboxId() : null;
+    // Get peer inbox ID for reference — call for any 2-person conversation, not just isDm,
+    // because isDm can be false for incoming DMs and the addedByInboxId fallback would
+    // incorrectly resolve to the connected user instead of the peer.
+    const peerInboxId = (conversation.isDm || members.length === 2)
+      ? await conversation.peerInboxId().catch(() => null)
+      : null;
 
     // For DMs and 2-person conversations, get peer identifier
     if (conversation.isDm || members.length === 2) {
-      // Use peerInboxId (reliable regardless of who initiated) to find the peer member.
-      // Falling back to "not the creator" (addedByInboxId) is wrong when the other
-      // party started the conversation — it would resolve to our own member.
       const peerMember = peerInboxId
         ? members.find((m) => m.inboxId === peerInboxId)
-        : members.find((m) => m.inboxId !== conversation.addedByInboxId);
+        : null;
       if (peerMember) {
         // Get peer identifier (Ethereum address)
         const identifier = peerMember.accountIdentifiers?.[0]?.identifier;
@@ -146,7 +147,9 @@ export const useInboxStore = create((set, get) => ({
       )
     );
 
-    // Get peer inbox IDs for DMs and 2-person conversations in parallel
+    // Get peer inbox IDs for DMs and 2-person conversations in parallel.
+    // Always use peerInboxId() — the addedByInboxId fallback is unreliable for
+    // incoming conversations because addedByInboxId is the peer, not the connected user.
     const allPeerInboxIds = new Map(
       await Promise.all(
         conversations
@@ -156,7 +159,7 @@ export const useInboxStore = create((set, get) => ({
           })
           .map(async (conversation) => [
             conversation.id,
-            await conversation.peerInboxId(),
+            await conversation.peerInboxId().catch(() => null),
           ])
       )
     );
@@ -184,7 +187,7 @@ export const useInboxStore = create((set, get) => ({
       if (conversation.isDm || members.length === 2) {
         const peerMember = peerInboxId
           ? members.find((m) => m.inboxId === peerInboxId)
-          : members.find((m) => m.inboxId !== conversation.addedByInboxId);
+          : null;
         if (peerMember) {
           // Get peer identifier (Ethereum address)
           const identifier = peerMember.accountIdentifiers?.[0]?.identifier;

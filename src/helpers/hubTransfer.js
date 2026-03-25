@@ -1,4 +1,5 @@
 import { parseAbiItem } from "viem";
+import { encodeCrcV2TransferData } from "@aboutcircles/sdk-utils";
 
 const HUB_ADDRESS = "0xc12C1E50ABB450d6205Ea2C3Fa861b3B834d13e8";
 const CIRCLES_RPC_URL = "https://rpc.aboutcircles.com/";
@@ -12,18 +13,11 @@ const HUB_ABI = [
 ];
 
 /**
- * Encodes a 32-byte XMTP messageId as type 0x0002 per the Circles SDK spec.
- * Format: 0x + 01 (version) + 0002 (type) + 0020 (length = 32 bytes) + messageId
- * e.g. 0xa966...f010 → 0x0100020020a966...f010
+ * Encodes a 32-byte XMTP messageId as type 0x0002 per the Circles SDK spec,
+ * using @aboutcircles/sdk-utils encodeCrcV2TransferData.
  */
 export function encodeMessageId(messageId) {
-  const hex = messageId.startsWith("0x") ? messageId.slice(2) : messageId;
-  if (hex.length !== 64) {
-    throw new Error(
-      `Invalid messageId: expected 32 bytes (64 hex chars), got ${hex.length / 2}`,
-    );
-  }
-  return `0x0100020020${hex}`;
+  return encodeCrcV2TransferData([messageId], 0x0002);
 }
 
 /**
