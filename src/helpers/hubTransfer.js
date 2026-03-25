@@ -12,6 +12,21 @@ const HUB_ABI = [
 ];
 
 /**
+ * Encodes a 32-byte XMTP messageId as type 0x0002 per the Circles SDK spec.
+ * Format: 0x + 01 (version) + 0002 (type) + 0020 (length = 32 bytes) + messageId
+ * e.g. 0xa966...f010 → 0x0100020020a966...f010
+ */
+export function encodeMessageId(messageId) {
+  const hex = messageId.startsWith("0x") ? messageId.slice(2) : messageId;
+  if (hex.length !== 64) {
+    throw new Error(
+      `Invalid messageId: expected 32 bytes (64 hex chars), got ${hex.length / 2}`,
+    );
+  }
+  return `0x0100020020${hex}`;
+}
+
+/**
  * Fetches the optimal transfer path for a given amount
  */
 async function findTransferPath(source, sink, targetFlowRaw) {
@@ -41,17 +56,56 @@ async function findTransferPath(source, sink, targetFlowRaw) {
 }
 
 /**
- * Executes a CRC transfer via the Hub's safeBatchTransferFrom
+ * Executes a CRC transfer via the Hub's safeBatchTransferFrom, with an
+ * XMTP message linked on-chain via the encoded messageId in _data.
+ *
+ * Flow:
+ *  1. Send XMTP message optimistically → get messageId
+ *  2. Encode messageId (type 0x0002) as _data
+ *  3. Find transfer path and call safeBatchTransferFrom on-chain
+ *  4. On success, publish the XMTP message
+ *
  * @param {object} params
  * @param {object} params.walletClient  - wagmi walletClient
  * @param {string} params.source        - sender address
- * @param {string} params.sink          - receiver address
+ * @param {string} params.sink          - receiver address (must be raw address, not username)
  * @param {string} params.amountCRC     - human-readable amount (e.g. "1.5")
+ * @param {string} params.note          - optional note text
+ * @param {string} params.peerDisplay   - display name or address shown to receiver
+ * @param {object} params.conversation  - raw XMTP conversation object
  * @returns {Promise<string>} transaction hash
  */
-export async function callHubTransfer({ walletClient, source, sink, amountCRC }) {
+export async function callHubTransfer({
+  walletClient,
+  source,
+  sink,
+  amountCRC,
+  note,
+  peerDisplay,
+  conversation,
+}) {
   if (!walletClient) throw new Error("Wallet client is required");
   if (!source || !sink) throw new Error("Source and sink addresses are required");
+  if (!conversation) throw new Error("Conversation is required");
+
+  // Encode transfer metadata into the XMTP message so both sides can render it
+  const payload = JSON.stringify({
+    value: amountCRC,
+    to: peerDisplay || sink,
+    note: note || "",
+  });
+  const xmtpMessage = `crc_transfer# ${payload}`;
+
+  // Step 1: Send optimistically to get the messageId before publishing
+  const messageId = await conversation.sendText(xmtpMessage, true);
+
+  // Step 2: Encode messageId as _data (type 0x0002)
+  let encodedData = "0x";
+  try {
+    encodedData = encodeMessageId(messageId);
+  } catch (e) {
+    console.warn("Could not encode messageId, proceeding with empty _data:", e.message);
+  }
 
   // Convert human-readable CRC to raw 18-decimal BigInt string
   const [wholePart = "0", fracPart = ""] = amountCRC.toString().split(".");
@@ -61,8 +115,8 @@ export async function callHubTransfer({ walletClient, source, sink, amountCRC })
     BigInt(fracPadded)
   ).toString();
 
+  // Step 3: Find path and execute on-chain
   const transfers = await findTransferPath(source, sink, targetFlowRaw);
-
   const ids = transfers.map((t) => BigInt(t.tokenOwner));
   const values = transfers.map((t) => BigInt(t.value));
 
@@ -70,8 +124,11 @@ export async function callHubTransfer({ walletClient, source, sink, amountCRC })
     address: HUB_ADDRESS,
     abi: HUB_ABI,
     functionName: "safeBatchTransferFrom",
-    args: [source, sink, ids, values, "0x"],
+    args: [source, sink, ids, values, encodedData],
   });
 
-  return hash;
+  // Step 4: Publish the optimistic XMTP message now that tx succeeded
+  await conversation.publishMessages();
+
+  return { hash, messageId };
 }

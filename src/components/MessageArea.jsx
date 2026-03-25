@@ -8,15 +8,123 @@ import React, {
 import { useConversation } from "../hooks/useConversation";
 import { useMetadata } from "../stores/inboxHooks";
 import { useAccount, useWalletClient } from "wagmi";
-import { getProfileByAddress, getCirclesMaxFlow } from "../helpers/circlesRpcCall";
-import { callHubTransfer } from "../helpers/hubTransfer";
+import {
+  getProfileByAddress,
+  getCirclesMaxFlow,
+  circlesGetTransferData,
+} from "../helpers/circlesRpcCall";
+import { callHubTransfer, encodeMessageId } from "../helpers/hubTransfer";
 import {
   formatMessageTimestamp,
   getMessageText,
   isRenderableMessage,
 } from "../helpers/messageContent";
 
-function CRCTransferFlow({ onClose, peerAddress, sinkAddress, sourceAddress }) {
+const CRC_PREFIX = "crc_transfer# ";
+const POLL_INTERVAL_MS = 5000;
+const POLL_MAX_ATTEMPTS = 24; // ~2 minutes
+
+function CRCTransferBubble({
+  message,
+  isSent,
+  peerDisplayName,
+  connectedAddress,
+  overrideTxHash,
+}) {
+  const [txHash, setTxHash] = useState(null);
+  const resolvedTxHash = overrideTxHash || txHash;
+  const messageText = getMessageText(message.content);
+
+  let transferData = { value: "", to: "", note: "" };
+  try {
+    transferData = JSON.parse(messageText.slice(CRC_PREFIX.length));
+  } catch {
+    // malformed payload
+  }
+  const { value: txValue, to: txTo, note: txNote } = transferData;
+
+  // Receiver side: poll circles_getTransferData until matching encoded messageId is found
+  useEffect(() => {
+    if (isSent || !connectedAddress || txHash) return;
+
+    let cancelled = false;
+    let attempts = 0;
+    let encoded;
+
+    try {
+      encoded = encodeMessageId(message.id);
+    } catch (e) {
+      console.warn("CRCTransferBubble: could not encode messageId", e.message);
+      return;
+    }
+
+    const poll = async () => {
+      while (!cancelled && attempts < POLL_MAX_ATTEMPTS) {
+        attempts++;
+        try {
+          const transfers = await circlesGetTransferData(connectedAddress);
+          console.log("Transfer ", transfers);
+          console.log("Looking for encoded ", encoded);
+          const match = Array.isArray(transfers)
+            ? transfers.find((t) => t.data === encoded)
+            : null;
+          if (match) {
+            if (!cancelled) setTxHash(match.transactionHash);
+            return;
+          }
+        } catch (e) {
+          console.warn("circlesGetTransferData error:", e.message);
+        }
+        console.log("fetching transfer data");
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+      }
+    };
+
+    poll();
+    return () => {
+      cancelled = true;
+    };
+  }, [message.id, isSent, connectedAddress]);
+
+  // Sender: don't render until txHash is available from the completed writeContract
+  if (isSent && !resolvedTxHash) return null;
+
+  const label = isSent
+    ? `Sent ${txValue} CRC to ${txTo}`
+    : `Received ${txValue} CRC`;
+
+  return (
+    <div className={`message-content crc-transfer-bubble${isSent ? " crc-transfer-bubble--sent" : ""}`}>
+      <span className="crc-bubble-icon">&#9679;</span>
+      <div className="crc-bubble-text">{label}</div>
+      {txNote ? <div className="crc-bubble-note">Note: {txNote}</div> : null}
+      {resolvedTxHash && (
+        <a
+          className="crc-bubble-txlink"
+          href={`https://gnosisscan.io/tx/${resolvedTxHash}`}
+          target="_blank"
+          rel="noopener noreferrer">
+          View transaction &#8599;
+        </a>
+      )}
+      {!isSent && !resolvedTxHash && (
+        <span className="crc-bubble-pending">Looking up transaction…</span>
+      )}
+      <div className="message-timestamp">
+        {formatMessageTimestamp(message.sentAtNs)}
+      </div>
+    </div>
+  );
+}
+
+function CRCTransferFlow({
+  onClose,
+  onTxComplete,
+  peerAddress,
+  sinkAddress,
+  sourceAddress,
+  conversation,
+}) {
   const [step, setStep] = useState("picker"); // "picker" | "form" | "sign"
   const [to] = useState(peerAddress || "");
   const [value, setValue] = useState("");
@@ -100,7 +208,10 @@ function CRCTransferFlow({ onClose, peerAddress, sinkAddress, sourceAddress }) {
                   value={value}
                   onChange={(e) => {
                     const input = e.target.value;
-                    if (maxFlow !== null && parseFloat(input) > parseFloat(maxFlow)) {
+                    if (
+                      maxFlow !== null &&
+                      parseFloat(input) > parseFloat(maxFlow)
+                    ) {
                       setValue(maxFlow);
                     } else {
                       setValue(input);
@@ -108,7 +219,9 @@ function CRCTransferFlow({ onClose, peerAddress, sinkAddress, sourceAddress }) {
                   }}
                 />
                 <span className="crc-field-hint">
-                  {maxFlow === null ? "Loading send limit…" : `Send Limit: ${maxFlow} CRC`}
+                  {maxFlow === null
+                    ? "Loading send limit…"
+                    : `Send Limit: ${maxFlow} CRC`}
                 </span>
               </div>
               <div className="crc-field">
@@ -138,7 +251,9 @@ function CRCTransferFlow({ onClose, peerAddress, sinkAddress, sourceAddress }) {
             <div className="crc-modal-header">
               <button
                 className="crc-back-btn"
-                onClick={() => { if (txState !== "pending") setStep("form"); }}
+                onClick={() => {
+                  if (txState !== "pending") setStep("form");
+                }}
                 aria-label="Back"
                 disabled={txState === "pending"}>
                 &#8592;
@@ -178,7 +293,9 @@ function CRCTransferFlow({ onClose, peerAddress, sinkAddress, sourceAddress }) {
             </div>
             <div className="crc-modal-footer">
               {txState === "done" ? (
-                <button className="crc-send-btn" onClick={onClose}>Close</button>
+                <button className="crc-send-btn" onClick={onClose}>
+                  Close
+                </button>
               ) : (
                 <button
                   className="crc-send-btn"
@@ -187,19 +304,25 @@ function CRCTransferFlow({ onClose, peerAddress, sinkAddress, sourceAddress }) {
                     setTxError("");
                     setTxState("pending");
                     try {
-                      await callHubTransfer({
+                      const { hash, messageId } = await callHubTransfer({
                         walletClient,
                         source: sourceAddress,
                         sink: sinkAddress,
                         amountCRC: value,
+                        note,
+                        peerDisplay: to,
+                        conversation,
                       });
+                      onTxComplete?.(messageId, hash);
                       setTxState("done");
                     } catch (err) {
                       setTxError(err.message || "Transaction failed");
                       setTxState("idle");
                     }
                   }}>
-                  {txState === "pending" ? "Waiting for signature…" : "Sign & Send"}
+                  {txState === "pending"
+                    ? "Waiting for signature…"
+                    : "Sign & Send"}
                 </button>
               )}
             </div>
@@ -216,6 +339,7 @@ function MessageArea({ conversation, xmtpClient, onBack, className }) {
   const [circlesProfile, setCirclesProfile] = useState(null);
   const [composerError, setComposerError] = useState("");
   const [showCRCTransfer, setShowCRCTransfer] = useState(false);
+  const [crcTxHashes, setCrcTxHashes] = useState({});
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const previousMessageCountRef = useRef(0);
@@ -414,6 +538,22 @@ function MessageArea({ conversation, xmtpClient, onBack, className }) {
             const isSent = message.senderInboxId === xmtpClient?.inboxId;
             const messageText = getMessageText(message.content);
 
+            if (messageText.startsWith(CRC_PREFIX)) {
+              return (
+                <div
+                  key={message.id}
+                  className={`message ${isSent ? "sent" : "received"}`}>
+                  <CRCTransferBubble
+                    message={message}
+                    isSent={isSent}
+                    peerDisplayName={displayName}
+                    connectedAddress={connectedAddress}
+                    overrideTxHash={isSent ? crcTxHashes[message.id] : undefined}
+                  />
+                </div>
+              );
+            }
+
             return (
               <div
                 key={message.id}
@@ -434,9 +574,13 @@ function MessageArea({ conversation, xmtpClient, onBack, className }) {
       {showCRCTransfer && (
         <CRCTransferFlow
           onClose={() => setShowCRCTransfer(false)}
+          onTxComplete={(msgId, hash) =>
+            setCrcTxHashes((prev) => ({ ...prev, [msgId]: hash }))
+          }
           peerAddress={circlesProfile?.name || fullAddress}
           sinkAddress={fullAddress}
           sourceAddress={connectedAddress}
+          conversation={conversation}
         />
       )}
 
