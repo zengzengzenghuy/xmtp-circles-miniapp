@@ -144,7 +144,7 @@ function CRCTransferFlow({
         writeContract: async ({ address, abi, functionName, args }) => {
           const data = encodeFunctionData({ abi, functionName, args });
           const hashes = await miniappSendTransactions([
-            { recipient: address, value: "0", data },
+            { to: address, value: "0", data },
           ]);
           return hashes[0];
         },
