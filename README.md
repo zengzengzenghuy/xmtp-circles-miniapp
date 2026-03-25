@@ -159,8 +159,9 @@ XMTP Browser SDK uses IndexedDB to store:
 - Displays only user-sent text messages
 - Shows timestamps in local time
 - Proper sent/received styling
+- Transfer CRC with note
 
-### Group chat
+### Group chat(On Roadmap)
 
 1. Circles Avatar group chat
    Circles avatars can create their own group chat without creating a Circles group. It works like usual xmtp group chat, with Circles avatars as group member.
@@ -278,6 +279,45 @@ Response
 }
 ```
 
+## CRC Transfer with Note
+
+### Why It Matters
+
+Send money and a message — privately. CRC Transfer with Note lets you attach a personal note to every Circles transfer, but unlike traditional payment apps where memos are visible to the platform or stored in plain text on-chain, your note is protected by **Message Layer Security (MLS)** through XMTP. Only you and the recipient can read it; the on-chain record contains nothing but an opaque `messageId`. Even if someone inspects the transaction on Gnosis Chain, they see a 32-byte identifier with no way to decrypt or link it back to the message content. This means you get the convenience of annotated payments — split bills, birthday gifts, DAO contributions — without sacrificing the financial privacy that Circles is built on.
+
+### What You Can Do
+
+Inside any 1-on-1 conversation, tap the **+** button in the composer bar to open the action menu. Select **Transfer CRC** to send Circles (CRC) tokens directly to the person you are chatting with.
+
+- The **To** field pre-fills with the recipient's Circles username (or raw address if they have no profile) and is read-only.
+- A **Send Limit** shows the maximum CRC transferable along the trust path between you and the recipient, queried live from the Circles network.
+- Enter a **Value** (capped at the send limit) and an optional **Note** — the note is recorded on both the XMTP message and linked to the on-chain transaction.
+- Click **Sign & Send** to approve the transaction in your wallet. Once confirmed, both you and the recipient see a dedicated transfer message with a link to the transaction on Gnosis Chain.
+
+### Technical Workflow
+
+#### Sender side
+
+1. **XMTP send** — `conversation.sendText("crc_transfer# {...}", true)` publishes an optimistic message to the local store and returns a `messageId` before the transaction is broadcast.
+2. **messageId encoding** — The `messageId` is encoded as a Circles SDK type `0x0002` payload (`0x0100020020` + 32-byte hex) and passed as the `_data` argument of `safeBatchTransferFrom`. This links the on-chain transaction to the XMTP message.
+3. **On-chain transfer** — `safeBatchTransferFrom` is called on the Circles V2 Hub (`0xc12C1E50ABB450d6205Ea2C3Fa861b3B834d13e8`, Gnosis chain). The transfer path is resolved first via `circlesV2_findPath`.
+4. **XMTP publish** — `conversation.publishMessages()` is called after `writeContract` resolves to broadcast the optimistic message to the network. Both XMTP calls are wrapped in `try-catch` so a node failure cannot block the on-chain transaction.
+5. **Deferred render** — The sender's transfer message modal returns `null` until `writeContract` resolves with a transaction hash. The `onTxComplete(messageId, hash)` callback from `CRCTransferFlow` populates a `crcTxHashes` map in `MessageArea`; the message modal renders only when its entry is present. This prevents a flash of a hash-less message modal from the optimistic message.
+
+#### Receiver side
+
+1. **Message detection** — Incoming messages prefixed with `crc_transfer# ` are rendered as `CRCTransferBubble` instead of plain text.
+2. **Polling for the tx hash** — The bubble message modal encodes `message.id` as type `0x0002` and polls `circles_getTransferData` every 5 seconds (up to 24 attempts, ~2 minutes) looking for a transfer whose `data` field matches the encoded messageId.
+3. **Link display** — Once matched, the bubble shows the transfer amount, note, and a **View transaction ↗** link to `https://gnosisscan.io/tx/{txHash}`.
+
+#### Component breakdown
+
+| Layer        | Responsibility                                                                                                                                                                           |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **XMTP**     | Message delivery; `messageId` used as the on-chain annotation key; `publishMessages()` broadcasts after tx                                                                               |
+| **Circles**  | `circlesV2_findPath` for pathfinding and send-limit discovery; `safeBatchTransferFrom` on the V2 Hub for the actual transfer; `circles_getTransferData` for receiver-side tx hash lookup |
+| **Frontend** | `CRCTransferFlow` modal (3-step: picker → form → confirm); `CRCTransferBubble` for rendering; deferred sender render via `crcTxHashes` map; receiver polling loop in bubble `useEffect`  |
+
 ## Troubleshooting
 
 ### Connection Issues
@@ -326,7 +366,7 @@ Response
 
 - [x] Support xmtp history sync
 - [ ] Circles integration features
-  - [ ] Transfer CRC with Notes
+  - [x] Transfer CRC with Notes
   - [x] Only allow conversation with human and has registered on XMTP
   - [ ] Only allow dm from avatar you trust
   - [x] Circles as identifier ID
