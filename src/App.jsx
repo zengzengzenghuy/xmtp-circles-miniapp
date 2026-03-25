@@ -389,6 +389,7 @@ function App() {
                 xmtpClient={xmtpClient}
                 onBack={() => setSelectedConversation(null)}
                 className={!selectedConversation ? "hidden-mobile" : ""}
+                connectedAddress={effectiveAddress}
               />
             </div>
           )
