@@ -135,12 +135,12 @@ function CRCTransferFlow({
   const { data: walletClient } = useWalletClient();
 
   useEffect(() => {
-    if (step !== "form" || !sourceAddress || !peerAddress) return;
+    if (step !== "form" || !sourceAddress || !sinkAddress) return;
     setMaxFlow(null);
-    getCirclesMaxFlow(sourceAddress, peerAddress)
+    getCirclesMaxFlow(sourceAddress, sinkAddress)
       .then(setMaxFlow)
       .catch(() => setMaxFlow("—"));
-  }, [step, sourceAddress, peerAddress]);
+  }, [step, sourceAddress, sinkAddress]);
 
   const handleOverlayClick = (e) => {
     if (e.target === e.currentTarget) onClose();

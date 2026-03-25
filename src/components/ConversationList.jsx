@@ -19,7 +19,10 @@ function ConversationItem({
 
   // Helper to get full peer address (not truncated)
   const getFullPeerAddress = () => {
-    if (metadata.identifier || (metadata.name && metadata.name.startsWith('0x'))) {
+    if (
+      metadata.identifier ||
+      (metadata.name && metadata.name.startsWith("0x"))
+    ) {
       return metadata.identifier || metadata.name;
     }
     return null;
@@ -28,7 +31,10 @@ function ConversationItem({
   // Helper to get peer address from metadata
   const getPeerAddress = () => {
     // Prefer identifier (Ethereum address) which is now in metadata.name
-    if (metadata.identifier || (metadata.name && metadata.name.startsWith('0x'))) {
+    if (
+      metadata.identifier ||
+      (metadata.name && metadata.name.startsWith("0x"))
+    ) {
       const addr = metadata.identifier || metadata.name;
       // Format as 0x1234...5678
       return String(addr).slice(0, 6) + "..." + String(addr).slice(-4);
@@ -76,7 +82,7 @@ function ConversationItem({
 
   // Get avatar initials safely - for addresses, skip the "0x" prefix
   const getAvatarText = () => {
-    if (peerAddress.startsWith('0x')) {
+    if (peerAddress.startsWith("0x")) {
       return peerAddress.slice(2, 4).toUpperCase();
     }
     return peerAddress && peerAddress.length >= 2
@@ -89,8 +95,9 @@ function ConversationItem({
 
   return (
     <div
-      className={`conversation-item ${selectedConversation?.id === conversation.id ? "active" : ""
-        }`}
+      className={`conversation-item ${
+        selectedConversation?.id === conversation.id ? "active" : ""
+      }`}
       onClick={() => onSelectConversation(conversation)}>
       {circlesProfile && circlesProfile.previewImageUrl ? (
         <img
@@ -130,11 +137,10 @@ function ConversationList({
   circlesMode,
   className,
 }) {
-
   return (
-    <div className={`conversation-list${className ? ` ${className}` : ''}`}>
+    <div className={`conversation-list${className ? ` ${className}` : ""}`}>
       <div className="conversation-list-header">
-        <h2>Circles Messages</h2>
+        <h2>Inbox</h2>
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
           {onRefresh && (
             <button
@@ -142,7 +148,15 @@ function ConversationList({
               onClick={() => onRefresh(true)}
               disabled={isLoading}
               title="Sync conversations">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round">
                 <path d="M21 2v6h-6" />
                 <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
                 <path d="M3 22v-6h6" />
@@ -150,8 +164,19 @@ function ConversationList({
               </svg>
             </button>
           )}
-          <button className="new-message-btn" onClick={onNewConversation} aria-label="New message">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <button
+            className="new-message-btn"
+            onClick={onNewConversation}
+            aria-label="New message">
+            <svg
+              width="22"
+              height="22"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round">
               <line x1="12" y1="5" x2="12" y2="19" />
               <line x1="5" y1="12" x2="19" y2="12" />
             </svg>
@@ -167,9 +192,7 @@ function ConversationList({
         ) : conversations.length === 0 ? (
           <div className="empty-state">
             <p>No conversations yet</p>
-            <button
-              className="empty-state-action"
-              onClick={onNewConversation}>
+            <button className="empty-state-action" onClick={onNewConversation}>
               Start a conversation
             </button>
           </div>
