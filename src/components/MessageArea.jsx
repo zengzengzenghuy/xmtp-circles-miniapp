@@ -7,7 +7,12 @@ import React, {
 } from "react";
 import { useConversation } from "../hooks/useConversation";
 import { useMetadata } from "../stores/inboxHooks";
-import { useAccount, useWalletClient } from "wagmi";
+import { useWalletClient } from "wagmi";
+import { encodeFunctionData } from "viem";
+import {
+  isMiniappMode,
+  sendTransactions as miniappSendTransactions,
+} from "@aboutcircles/miniapp-sdk";
 import {
   getProfileByAddress,
   getCirclesMaxFlow,
@@ -133,7 +138,18 @@ function CRCTransferFlow({
   const [maxFlow, setMaxFlow] = useState(null);
   const [txState, setTxState] = useState("idle"); // "idle" | "pending" | "done" | "error"
   const [txError, setTxError] = useState("");
-  const { data: walletClient } = useWalletClient();
+  const { data: wagmiWalletClient } = useWalletClient();
+  const walletClient = isMiniappMode()
+    ? {
+        writeContract: async ({ address, abi, functionName, args }) => {
+          const data = encodeFunctionData({ abi, functionName, args });
+          const hashes = await miniappSendTransactions([
+            { recipient: address, value: "0", data },
+          ]);
+          return hashes[0];
+        },
+      }
+    : wagmiWalletClient;
 
   useEffect(() => {
     if (step !== "form" || !sourceAddress || !sinkAddress) return;
@@ -334,8 +350,7 @@ function CRCTransferFlow({
   );
 }
 
-function MessageArea({ conversation, xmtpClient, onBack, className }) {
-  const { address: connectedAddress } = useAccount();
+function MessageArea({ conversation, xmtpClient, onBack, className, connectedAddress }) {
   const [inputValue, setInputValue] = useState("");
   const [circlesProfile, setCirclesProfile] = useState(null);
   const [composerError, setComposerError] = useState("");
