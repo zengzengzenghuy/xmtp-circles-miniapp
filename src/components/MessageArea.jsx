@@ -43,9 +43,10 @@ function CRCTransferBubble({
   }
   const { value: txValue, to: txTo, note: txNote } = transferData;
 
-  // Receiver side: poll circles_getTransferData until matching encoded messageId is found
+  // Poll circles_getTransferData to recover tx hash — runs for both sender and receiver.
+  // Sender uses overrideTxHash in the same session; this polling handles page-refresh recovery.
   useEffect(() => {
-    if (isSent || !connectedAddress || txHash) return;
+    if (!connectedAddress || txHash || overrideTxHash) return;
 
     let cancelled = false;
     let attempts = 0;
@@ -84,7 +85,7 @@ function CRCTransferBubble({
     return () => {
       cancelled = true;
     };
-  }, [message.id, isSent, connectedAddress]);
+  }, [message.id, connectedAddress, overrideTxHash]);
 
   // Sender: don't render until txHash is available from the completed writeContract
   if (isSent && !resolvedTxHash) return null;
