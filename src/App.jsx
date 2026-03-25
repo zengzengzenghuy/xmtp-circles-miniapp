@@ -182,6 +182,8 @@ function App() {
 
       console.log("Client created:", client);
 
+      await client.sendSyncRequest();
+
       // Store inbox ID in localStorage if it's a new inbox
       if (!storedInboxId) {
         localStorage.setItem(
