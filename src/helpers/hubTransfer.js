@@ -1,16 +1,16 @@
-import { TransferBuilder } from "@aboutcircles/sdk-transfers";
-import {
-  circlesConfig,
-  CirclesConverter,
-  encodeCrcV2TransferData,
-  hexToBytes,
-} from "@aboutcircles/sdk-utils";
+import { parseAbiItem } from "viem";
+import { encodeCrcV2TransferData } from "@aboutcircles/sdk-utils";
 
+const HUB_ADDRESS = "0xc12C1E50ABB450d6205Ea2C3Fa861b3B834d13e8";
 const CIRCLES_RPC_URL = "https://rpc.aboutcircles.com/";
-export const MAX_FLOW_TARGET =
+const MAX_FLOW_TARGET =
   "115792089237316195423570985008687907853269984665640564039457584007913129639935";
 
-const transferBuilder = new TransferBuilder(circlesConfig[100]);
+const HUB_ABI = [
+  parseAbiItem(
+    "function safeBatchTransferFrom(address _from, address _to, uint256[] memory _ids, uint256[] memory _values, bytes _data) public",
+  ),
+];
 
 /**
  * Encodes a 32-byte XMTP messageId as type 0x0002 per the Circles SDK spec,
@@ -50,15 +50,14 @@ async function findTransferPath(source, sink, targetFlowRaw) {
 }
 
 /**
- * Executes a CRC transfer via TransferBuilder.constructAdvancedTransfer, with
- * an XMTP message linked on-chain via the encoded messageId in txData.
+ * Executes a CRC transfer via the Hub's safeBatchTransferFrom, with an
+ * XMTP message linked on-chain via the encoded messageId in _data.
  *
  * Flow:
  *  1. Send XMTP message optimistically → get messageId
- *  2. Encode messageId (type 0x0002) as txData bytes
- *  3. Publish XMTP message immediately (before wallet signing to avoid intent TTL expiry)
- *  4. Build transactions via constructAdvancedTransfer
- *  5. Send as a single tx (direct or Multicall3) → return one hash
+ *  2. Encode messageId (type 0x0002) as _data
+ *  3. Find transfer path and call safeBatchTransferFrom on-chain
+ *  4. On success, publish the XMTP message
  *
  * @param {object} params
  * @param {object} params.walletClient  - wagmi walletClient
@@ -68,7 +67,7 @@ async function findTransferPath(source, sink, targetFlowRaw) {
  * @param {string} params.note          - optional note text
  * @param {string} params.peerDisplay   - display name or address shown to receiver
  * @param {object} params.conversation  - raw XMTP conversation object
- * @returns {Promise<{ hash: string, messageId: string }>}
+ * @returns {Promise<string>} transaction hash
  */
 export async function callHubTransfer({
   walletClient,
@@ -80,8 +79,7 @@ export async function callHubTransfer({
   conversation,
 }) {
   if (!walletClient) throw new Error("Wallet client is required");
-  if (!source || !sink)
-    throw new Error("Source and sink addresses are required");
+  if (!source || !sink) throw new Error("Source and sink addresses are required");
   if (!conversation) throw new Error("Conversation is required");
 
   // Encode transfer metadata into the XMTP message so both sides can render it
@@ -95,43 +93,36 @@ export async function callHubTransfer({
   // Step 1: Send optimistically to get the messageId before publishing
   const messageId = await conversation.sendText(xmtpMessage, true);
 
-  // Step 2: Encode messageId as txData bytes (type 0x0002)
-  let txData;
+  // Step 2: Encode messageId as _data (type 0x0002)
+  let encodedData = "0x";
   try {
-    txData = hexToBytes(encodeMessageId(messageId));
+    encodedData = encodeMessageId(messageId);
   } catch (e) {
-    console.warn(
-      "Could not encode messageId, proceeding without txData:",
-      e.message,
-    );
+    console.warn("Could not encode messageId, proceeding with empty _data:", e.message);
   }
 
-  // Step 3: Publish the XMTP message immediately — pending intents have a short
-  // TTL and the wallet signing step below can take 30+ seconds, causing
-  // "Sync failed to wait for intent" if we defer until after sending.
+  // Convert human-readable CRC to raw 18-decimal BigInt string
+  const [wholePart = "0", fracPart = ""] = amountCRC.toString().split(".");
+  const fracPadded = fracPart.padEnd(18, "0").slice(0, 18);
+  const targetFlowRaw = (
+    BigInt(wholePart) * BigInt("1000000000000000000") +
+    BigInt(fracPadded)
+  ).toString();
+
+  // Step 3: Find path and execute on-chain
+  const transfers = await findTransferPath(source, sink, targetFlowRaw);
+  const ids = transfers.map((t) => BigInt(t.tokenOwner));
+  const values = transfers.map((t) => BigInt(t.value));
+
+  const hash = await walletClient.writeContract({
+    address: HUB_ADDRESS,
+    abi: HUB_ABI,
+    functionName: "safeBatchTransferFrom",
+    args: [source, sink, ids, values, encodedData],
+  });
+
+  // Step 4: Publish the optimistic XMTP message now that tx succeeded
   await conversation.publishMessages();
-
-  // Step 4: Build transactions via TransferBuilder
-  const amount = CirclesConverter.circlesToAttoCircles(Number(amountCRC));
-  const txs = await transferBuilder.constructAdvancedTransfer(
-    source,
-    sink,
-    amount,
-    txData ? { txData } : undefined,
-  );
-
-  // Step 5: Send each tx sequentially (nonce ordering), then pick the hash
-  // belonging to operateFlowMatrix — identified by its 4-byte selector 0x0d22d9b5.
-  // It is always present; approval / unwrap / wrap txs around it are optional.
-  const OPERATE_FLOW_MATRIX_SELECTOR = "0x0d22d9b5";
-  const hashes = [];
-  for (const tx of txs) {
-    hashes.push(await walletClient.sendTransaction(tx));
-  }
-  const flowMatrixIndex = txs.findIndex((tx) =>
-    tx.data?.startsWith(OPERATE_FLOW_MATRIX_SELECTOR),
-  );
-  const hash = hashes[flowMatrixIndex] ?? hashes[hashes.length - 1];
 
   return { hash, messageId };
 }
