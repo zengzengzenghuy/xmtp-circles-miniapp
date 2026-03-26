@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useAccount, useSignMessage } from "wagmi";
-import { Client, IdentifierKind, LogLevel } from "@xmtp/browser-sdk";
+import { Client, LogLevel } from "@xmtp/browser-sdk";
 import ConversationList from "./components/ConversationList";
 import MessageArea from "./components/MessageArea";
 import BottomTabs from "./components/BottomTabs";
@@ -83,9 +83,7 @@ function App() {
   const {
     conversations,
     sync,
-    syncAll,
     loading: isLoadingConversations,
-    syncing,
     stream,
     streamAllMessages,
     createDmWithAddress,
@@ -274,9 +272,15 @@ function App() {
   const syncRef = useRef(sync);
   const startStreamsRef = useRef(startStreams);
   const stopStreamsRef = useRef(stopStreams);
-  useEffect(() => { syncRef.current = sync; }, [sync]);
-  useEffect(() => { startStreamsRef.current = startStreams; }, [startStreams]);
-  useEffect(() => { stopStreamsRef.current = stopStreams; }, [stopStreams]);
+  useEffect(() => {
+    syncRef.current = sync;
+  }, [sync]);
+  useEffect(() => {
+    startStreamsRef.current = startStreams;
+  }, [startStreams]);
+  useEffect(() => {
+    stopStreamsRef.current = stopStreams;
+  }, [stopStreams]);
 
   // Initial sync and stream setup when client is loaded.
   // Intentionally depends only on xmtpClient so streams are created once per
@@ -336,12 +340,6 @@ function App() {
     setSelectedConversation(dm);
 
     console.log("Conversation selected:", dm);
-  };
-
-  // Format address for display
-  const formatAddress = (addr) => {
-    if (!addr) return "";
-    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
 
   return (
