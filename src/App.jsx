@@ -132,6 +132,28 @@ function App() {
         console.log(
           "Creating SCW signer for miniapp mode (Gnosis chainId=100)",
         );
+
+        // Warn if the Safe contract is not yet deployed — XMTP's
+        // VerifySmartContractWalletSignatures needs isValidSignature() on-chain.
+        try {
+          const code = await window.ethereum?.request({
+            method: "eth_getCode",
+            params: [activeAddress, "latest"],
+          });
+          if (!code || code === "0x" || code === "0x0") {
+            console.warn(
+              `Safe at ${activeAddress} has no bytecode on Gnosis Chain. ` +
+                `VerifySmartContractWalletSignatures will fail until the contract is deployed.`,
+            );
+          } else {
+            console.log(
+              `Safe contract confirmed deployed at ${activeAddress} (bytecode length: ${code.length})`,
+            );
+          }
+        } catch (e) {
+          console.warn("Could not check Safe contract deployment status:", e);
+        }
+
         signer = createSCWSigner(
           activeAddress,
           async (message) => {
@@ -215,6 +237,20 @@ function App() {
           "3. Turn OFF 'Block fingerprinting'\n" +
           "4. Refresh the page and try again\n\n" +
           "Or try Chrome/Firefox which have better compatibility.";
+      } else if (
+        errorMessage.includes("signature") ||
+        errorMessage.includes("VerifySmartContractWallet") ||
+        errorMessage.includes("invalid signature") ||
+        errorMessage.includes("status 0") ||
+        errorMessage.includes("grpc")
+      ) {
+        errorMessage +=
+          "\n\nSmart contract wallet signature verification failed.\n" +
+          "Possible causes:\n" +
+          "• The Safe wallet is not yet deployed on Gnosis Chain (chain 100).\n" +
+          "• The signature format returned by the Safe host is not ERC-1271 compatible.\n" +
+          "• A CORS or network error blocked the XMTP verification request.\n\n" +
+          "Check the browser console for 'Cross-Origin Request Blocked' or SCW signMessage warnings.";
       }
 
       setInboxError(errorMessage);
