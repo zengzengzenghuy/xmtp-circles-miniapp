@@ -9,6 +9,8 @@ function AccountPage({
   onCreateInbox,
   circlesMode,
   onCirclesModeToggle,
+  xmtpEnv = "dev",
+  onXmtpEnvChange,
   address: addressProp,
   isConnected: isConnectedProp,
   isMiniapp = false,
@@ -306,6 +308,21 @@ function AccountPage({
                     aria-label="Toggle Circles mode">
                     <span className="settings-toggle-knob" />
                   </button>
+                </div>
+                <div className="settings-item">
+                  <div className="settings-item-info">
+                    <span className="settings-item-label">XMTP Environment</span>
+                    <span className="settings-item-description">
+                      Network used when activating your XMTP inbox
+                    </span>
+                  </div>
+                  <select
+                    className="settings-select"
+                    value={xmtpEnv}
+                    onChange={(e) => onXmtpEnvChange(e.target.value)}>
+                    <option value="dev">dev</option>
+                    <option value="production">production</option>
+                  </select>
                 </div>
               </div>
             </div>

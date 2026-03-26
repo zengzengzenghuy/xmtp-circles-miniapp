@@ -44,6 +44,14 @@ function App() {
     const saved = localStorage.getItem("circles-mode");
     return saved === null ? true : saved === "true";
   });
+  const [xmtpEnv, setXmtpEnv] = useState(() => {
+    return localStorage.getItem("xmtp-env") || "dev";
+  });
+
+  const handleXmtpEnvChange = (newEnv) => {
+    setXmtpEnv(newEnv);
+    localStorage.setItem("xmtp-env", newEnv);
+  };
 
   // Save circles mode to localStorage when it changes
   const handleCirclesModeToggle = () => {
@@ -196,7 +204,7 @@ function App() {
       }
 
       const client = await Client.create(signer, {
-        env: "dev",
+        env: xmtpEnv,
         dbEncryptionKey: undefined,
         appVersion: "xmtp-miniapp/0",
         loggingLevel: LogLevel.Debug,
@@ -452,6 +460,8 @@ function App() {
             onCreateInbox={handleCreateInbox}
             circlesMode={circlesMode}
             onCirclesModeToggle={handleCirclesModeToggle}
+            xmtpEnv={xmtpEnv}
+            onXmtpEnvChange={handleXmtpEnvChange}
             address={effectiveAddress}
             isConnected={effectiveConnected}
             isMiniapp={isMiniapp}
