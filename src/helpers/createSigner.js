@@ -3,6 +3,7 @@
  * Based on xmtp.chat implementation
  */
 import { IdentifierKind } from "@xmtp/browser-sdk";
+import { hashMessage } from "viem";
 
 export const createEOASigner = (address, signMessage) => {
   return {
@@ -78,7 +79,12 @@ export const createSCWSigner = (address, signMessage, chainId = 1) => {
     signMessage: async (message) => {
       console.log("SCW Signer.signMessage() called with message:", message);
       try {
-        const signature = await signMessage(message);
+        // XMTP node calls safe.isValidSignature(eip191Hash(message), sig).
+        // Pre-compute the EIP-191 hash and pass it to the host so the Safe
+        // signs over the exact bytes XMTP will later verify against.
+        const eip191Hash = hashMessage(message);
+        console.log("EIP-191 hash for SCW signing:", eip191Hash);
+        const signature = await signMessage(eip191Hash, "erc1271");
         console.log("Got signature:", signature);
         // Fetch block number right after signing so getBlockNumber() returns
         // the block that was current at the moment the signature was produced.
