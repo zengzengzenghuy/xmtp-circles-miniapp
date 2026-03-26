@@ -431,7 +431,10 @@ function MessageArea({
 
     const loadMessages = async () => {
       try {
-        await syncRef.current(true);
+        // Read from local DB only — the initial client sync in App.jsx and
+        // the background streamAllMessages keep MLS state current without
+        // triggering VerifySmartContractWalletSignatures on every click.
+        await syncRef.current();
         console.log("Loaded messages for conversation:", conversation.id);
       } catch (error) {
         console.error("Error loading messages:", error);
