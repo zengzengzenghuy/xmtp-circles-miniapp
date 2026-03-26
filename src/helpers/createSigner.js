@@ -35,7 +35,7 @@ export const createEOASigner = (address, signMessage) => {
   };
 };
 
-const GNOSIS_RPC_URL = "https://rpc.gnosischain.io/";
+const GNOSIS_RPC_URL = "https://rpc.gnosischain.com/";
 
 const fetchGnosisBlockNumber = async () => {
   try {
