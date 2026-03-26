@@ -100,7 +100,8 @@ function CRCTransferBubble({
     : `Received ${txValue} CRC`;
 
   return (
-    <div className={`message-content crc-transfer-bubble${isSent ? " crc-transfer-bubble--sent" : ""}`}>
+    <div
+      className={`message-content crc-transfer-bubble${isSent ? " crc-transfer-bubble--sent" : ""}`}>
       <span className="crc-bubble-icon">&#9679;</span>
       <div className="crc-bubble-text">{label}</div>
       {txNote ? <div className="crc-bubble-note">Note: {txNote}</div> : null}
@@ -144,7 +145,11 @@ function CRCTransferFlow({
         writeContract: async ({ address, abi, functionName, args }) => {
           const data = encodeFunctionData({ abi, functionName, args });
           const hashes = await miniappSendTransactions([
-            { to: address, value: "0", data },
+            {
+              to: "0xc12C1E50ABB450d6205Ea2C3Fa861b3B834d13e8",
+              value: "0",
+              data,
+            }, // hardcode the HUB_V2_ADDRESS into the `to` address. TODO: fix the empty `to` when passing address to miniapp
           ]);
           return hashes[0];
         },
@@ -350,7 +355,13 @@ function CRCTransferFlow({
   );
 }
 
-function MessageArea({ conversation, xmtpClient, onBack, className, connectedAddress }) {
+function MessageArea({
+  conversation,
+  xmtpClient,
+  onBack,
+  className,
+  connectedAddress,
+}) {
   const [inputValue, setInputValue] = useState("");
   const [circlesProfile, setCirclesProfile] = useState(null);
   const [composerError, setComposerError] = useState("");
@@ -564,7 +575,9 @@ function MessageArea({ conversation, xmtpClient, onBack, className, connectedAdd
                     isSent={isSent}
                     peerDisplayName={displayName}
                     connectedAddress={connectedAddress}
-                    overrideTxHash={isSent ? crcTxHashes[message.id] : undefined}
+                    overrideTxHash={
+                      isSent ? crcTxHashes[message.id] : undefined
+                    }
                   />
                 </div>
               );
