@@ -95,9 +95,7 @@ function CRCTransferBubble({
   // Sender: don't render until txHash is available from the completed writeContract
   if (isSent && !resolvedTxHash) return null;
 
-  const label = isSent
-    ? `Sent ${txValue} CRC to ${txTo}`
-    : `Received ${txValue} CRC`;
+  const label = isSent ? `Sent ${txValue} CRC` : `Sent ${txValue} CRC`;
 
   return (
     <div

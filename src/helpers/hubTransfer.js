@@ -101,6 +101,11 @@ export async function callHubTransfer({
     console.warn("Could not encode messageId, proceeding with empty _data:", e.message);
   }
 
+  // Step 3: Publish the XMTP message immediately — pending intents have a short
+  // TTL and the wallet signing step below can take 30+ seconds, causing
+  // "Sync failed to wait for intent" if we defer until after writeContract.
+  await conversation.publishMessages();
+
   // Convert human-readable CRC to raw 18-decimal BigInt string
   const [wholePart = "0", fracPart = ""] = amountCRC.toString().split(".");
   const fracPadded = fracPart.padEnd(18, "0").slice(0, 18);
@@ -109,7 +114,7 @@ export async function callHubTransfer({
     BigInt(fracPadded)
   ).toString();
 
-  // Step 3: Find path and execute on-chain
+  // Step 4: Find path and execute on-chain
   const transfers = await findTransferPath(source, sink, targetFlowRaw);
   const ids = transfers.map((t) => BigInt(t.tokenOwner));
   const values = transfers.map((t) => BigInt(t.value));
@@ -120,9 +125,6 @@ export async function callHubTransfer({
     functionName: "safeBatchTransferFrom",
     args: [source, sink, ids, values, encodedData],
   });
-
-  // Step 4: Publish the optimistic XMTP message now that tx succeeded
-  await conversation.publishMessages();
 
   return { hash, messageId };
 }
