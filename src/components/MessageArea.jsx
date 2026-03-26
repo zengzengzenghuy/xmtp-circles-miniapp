@@ -415,13 +415,6 @@ function MessageArea({
     fetchCirclesProfile();
   }, [conversation?.id, metadata.identifier, metadata.name]);
 
-  // Keep a ref to the latest sync so the effect below only re-runs when the
-  // conversation changes, not every time a message arrives and updates lastSentAt
-  // (which causes sync to get a new reference, creating a conversation.sync() loop
-  // that floods VerifySmartContractWalletSignatures).
-  const syncRef = useRef(sync);
-  useEffect(() => { syncRef.current = sync; }, [sync]);
-
   // Load messages when conversation changes
   useEffect(() => {
     if (!conversation) return;
@@ -431,10 +424,8 @@ function MessageArea({
 
     const loadMessages = async () => {
       try {
-        // Read from local DB only — the initial client sync in App.jsx and
-        // the background streamAllMessages keep MLS state current without
-        // triggering VerifySmartContractWalletSignatures on every click.
-        await syncRef.current();
+        // Sync messages for this conversation from network
+        await sync(true);
         console.log("Loaded messages for conversation:", conversation.id);
       } catch (error) {
         console.error("Error loading messages:", error);
@@ -442,7 +433,7 @@ function MessageArea({
     };
 
     loadMessages();
-  }, [conversation]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [conversation, sync]);
 
   useEffect(() => {
     setShowCRCTransfer(false);

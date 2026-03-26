@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useAccount, useSignMessage } from "wagmi";
-import { Client, LogLevel } from "@xmtp/browser-sdk";
+import { Client, IdentifierKind, LogLevel } from "@xmtp/browser-sdk";
 import ConversationList from "./components/ConversationList";
 import MessageArea from "./components/MessageArea";
 import BottomTabs from "./components/BottomTabs";
@@ -83,7 +83,9 @@ function App() {
   const {
     conversations,
     sync,
+    syncAll,
     loading: isLoadingConversations,
+    syncing,
     stream,
     streamAllMessages,
     createDmWithAddress,
@@ -266,39 +268,22 @@ function App() {
     [sync, startStreams, stopStreams],
   );
 
-  // Keep refs to the latest callbacks so the stream setup effect below can
-  // call them without taking them as dependencies — prevents streams from
-  // being torn down and recreated every time the conversation store updates.
-  const syncRef = useRef(sync);
-  const startStreamsRef = useRef(startStreams);
-  const stopStreamsRef = useRef(stopStreams);
-  useEffect(() => {
-    syncRef.current = sync;
-  }, [sync]);
-  useEffect(() => {
-    startStreamsRef.current = startStreams;
-  }, [startStreams]);
-  useEffect(() => {
-    stopStreamsRef.current = stopStreams;
-  }, [stopStreams]);
-
-  // Initial sync and stream setup when client is loaded.
-  // Intentionally depends only on xmtpClient so streams are created once per
-  // session, not on every store update.
+  // Initial sync and stream setup when client is loaded
   useEffect(() => {
     if (!xmtpClient) return;
 
     const loadConversations = async () => {
-      await syncRef.current(true);
-      await startStreamsRef.current();
+      await sync(true);
+      await startStreams();
     };
 
     loadConversations();
 
+    // Cleanup streams on unmount or client change
     return () => {
-      stopStreamsRef.current();
+      stopStreams();
     };
-  }, [xmtpClient]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [xmtpClient, sync, startStreams, stopStreams]);
 
   const handleSelectConversation = (conversation) => {
     setSelectedConversation(conversation);
@@ -340,6 +325,12 @@ function App() {
     setSelectedConversation(dm);
 
     console.log("Conversation selected:", dm);
+  };
+
+  // Format address for display
+  const formatAddress = (addr) => {
+    if (!addr) return "";
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
 
   return (
