@@ -268,22 +268,33 @@ function App() {
     [sync, startStreams, stopStreams],
   );
 
-  // Initial sync and stream setup when client is loaded
+  // Keep refs to the latest callbacks so the stream setup effect below can
+  // call them without taking them as dependencies — prevents streams from
+  // being torn down and recreated every time the conversation store updates.
+  const syncRef = useRef(sync);
+  const startStreamsRef = useRef(startStreams);
+  const stopStreamsRef = useRef(stopStreams);
+  useEffect(() => { syncRef.current = sync; }, [sync]);
+  useEffect(() => { startStreamsRef.current = startStreams; }, [startStreams]);
+  useEffect(() => { stopStreamsRef.current = stopStreams; }, [stopStreams]);
+
+  // Initial sync and stream setup when client is loaded.
+  // Intentionally depends only on xmtpClient so streams are created once per
+  // session, not on every store update.
   useEffect(() => {
     if (!xmtpClient) return;
 
     const loadConversations = async () => {
-      await sync(true);
-      await startStreams();
+      await syncRef.current(true);
+      await startStreamsRef.current();
     };
 
     loadConversations();
 
-    // Cleanup streams on unmount or client change
     return () => {
-      stopStreams();
+      stopStreamsRef.current();
     };
-  }, [xmtpClient, sync, startStreams, stopStreams]);
+  }, [xmtpClient]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSelectConversation = (conversation) => {
     setSelectedConversation(conversation);
@@ -366,7 +377,13 @@ function App() {
                   {isCreatingInbox ? "Connecting..." : "Activate Inbox"}
                 </button>
                 {inboxError && (
-                  <p className="connect-hint" style={{ color: "var(--error-ink)", marginTop: "1rem", fontSize: "0.85rem" }}>
+                  <p
+                    className="connect-hint"
+                    style={{
+                      color: "var(--error-ink)",
+                      marginTop: "1rem",
+                      fontSize: "0.85rem",
+                    }}>
                     {inboxError}
                   </p>
                 )}
