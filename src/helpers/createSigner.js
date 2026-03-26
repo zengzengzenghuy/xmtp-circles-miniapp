@@ -35,8 +35,37 @@ export const createEOASigner = (address, signMessage) => {
   };
 };
 
+const GNOSIS_RPC_URL = "https://rpc.gnosischain.io/";
+
+const fetchGnosisBlockNumber = async () => {
+  try {
+    const res = await fetch(GNOSIS_RPC_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "eth_blockNumber",
+        params: [],
+      }),
+    });
+    const data = await res.json();
+    if (data.result) return BigInt(data.result);
+  } catch (_) {
+    // Silent fail — XMTP falls back to "latest" if blockNumber is undefined
+  }
+  return undefined;
+};
+
 export const createSCWSigner = (address, signMessage, chainId = 1) => {
   console.log("Creating SCW signer with chain ID:", chainId);
+
+  // Holds the block number fetched at signing time. The XMTP node uses this
+  // as the anchor block for ERC-1271 verification so all concurrent
+  // VerifySmartContractWalletSignatures requests use the same block,
+  // preventing installation diff race conditions.
+  let latestBlockNumber;
+
   return {
     type: "SCW",
     getIdentifier: () => {
@@ -51,6 +80,10 @@ export const createSCWSigner = (address, signMessage, chainId = 1) => {
       try {
         const signature = await signMessage(message);
         console.log("Got signature:", signature);
+        // Fetch block number right after signing so getBlockNumber() returns
+        // the block that was current at the moment the signature was produced.
+        latestBlockNumber = await fetchGnosisBlockNumber();
+        console.log("Block number at signing time:", latestBlockNumber);
         // Convert hex signature to Uint8Array
         const hex = signature.startsWith("0x") ? signature.slice(2) : signature;
         const bytes = new Uint8Array(hex.length / 2);
@@ -68,5 +101,8 @@ export const createSCWSigner = (address, signMessage, chainId = 1) => {
       console.log("SCW Signer.getChainId() called, returning:", chainId);
       return BigInt(chainId);
     },
+    // Called synchronously by the SDK right after signMessage resolves.
+    // Returns the block number captured during signing.
+    getBlockNumber: () => latestBlockNumber,
   };
 };
