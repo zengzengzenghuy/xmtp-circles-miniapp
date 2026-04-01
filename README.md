@@ -6,11 +6,11 @@ A fully-functional XMTP chat application with integrated wallet connection, real
 
 1. Onboarding
 
-   <video src="https://github.com/zengzengzenghuy/xmtp-circles-miniapp/blob/main/static/video/onboard.mp4" width="300" controls></video>
+   <video src="https://github.com/zengzengzenghuy/xmtp-circles-miniapp/raw/main/static/video/onboard.mp4" width="300" controls></video>
 
 2. Send CRC in your chat
 
-   <video src="https://github.com/zengzengzenghuy/xmtp-circles-miniapp/blob/main/static/video/sendtx.mp4" width="300" controls></video>
+   <video src="https://github.com/zengzengzenghuy/xmtp-circles-miniapp/raw/main/static/video/sendtx.mp4" width="300" controls></video>
 
 ## Setup
 
