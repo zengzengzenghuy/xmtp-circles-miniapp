@@ -357,7 +357,7 @@ Inside any 1-on-1 conversation, tap the **+** button in the composer bar to open
 ## Roadmap
 
 - [x] Support xmtp history sync
-- [ ] Circles integration features
+- [X] Circles integration features
   - [x] Transfer CRC with Notes
   - [x] Only allow conversation with human and has registered on XMTP
   - [ ] Only allow dm from avatar you trust
@@ -366,7 +366,7 @@ Inside any 1-on-1 conversation, tap the **+** button in the composer bar to open
   - [x] Support search using Circles username
 - [ ] XMTP Group chat support
 - [ ] Circles group chat support
-  - [x] Show available Circles group
+  - [ ] Show available Circles group
   - [ ] Create Circles group and add member (WIP)
   - [ ] Join existing Circles group
 - [x] Compatible with Circles MiniApp
