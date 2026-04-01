@@ -385,6 +385,7 @@ function App() {
               <MessageArea
                 conversation={selectedConversation}
                 xmtpClient={xmtpClient}
+                syncAllConversations={syncAll}
                 onBack={() => setSelectedConversation(null)}
                 className={!selectedConversation ? "hidden-mobile" : ""}
               />
