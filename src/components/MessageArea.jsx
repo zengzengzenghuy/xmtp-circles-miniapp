@@ -8,7 +8,7 @@ import {
   isRenderableMessage,
 } from "../helpers/messageContent";
 
-function MessageArea({ conversation, xmtpClient, onBack, className }) {
+function MessageArea({ conversation, xmtpClient, syncAllConversations, onBack, className }) {
   const [inputValue, setInputValue] = useState("");
   const [circlesProfile, setCirclesProfile] = useState(null);
   const [composerError, setComposerError] = useState("");
@@ -68,7 +68,10 @@ function MessageArea({ conversation, xmtpClient, onBack, className }) {
 
     const loadMessages = async () => {
       try {
-        // Sync messages for this conversation from network
+        // Sync all conversations first, then sync this conversation from network
+        if (syncAllConversations) {
+          await syncAllConversations();
+        }
         await sync(true);
         console.log("Loaded messages for conversation:", conversation.id);
       } catch (error) {
@@ -77,7 +80,7 @@ function MessageArea({ conversation, xmtpClient, onBack, className }) {
     };
 
     loadMessages();
-  }, [conversation, sync]);
+  }, [conversation, sync, syncAllConversations]);
 
   const visibleMessages = useMemo(
     () => messages.filter(isRenderableMessage),
