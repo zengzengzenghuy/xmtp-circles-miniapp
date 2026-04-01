@@ -44,6 +44,14 @@ function App() {
     const saved = localStorage.getItem("circles-mode");
     return saved === null ? true : saved === "true";
   });
+  const [xmtpEnv, setXmtpEnv] = useState(() => {
+    return localStorage.getItem("xmtp-env") || "dev";
+  });
+
+  const handleXmtpEnvChange = (newEnv) => {
+    setXmtpEnv(newEnv);
+    localStorage.setItem("xmtp-env", newEnv);
+  };
 
   // Save circles mode to localStorage when it changes
   const handleCirclesModeToggle = () => {
@@ -132,6 +140,28 @@ function App() {
         console.log(
           "Creating SCW signer for miniapp mode (Gnosis chainId=100)",
         );
+
+        // Warn if the Safe contract is not yet deployed — XMTP's
+        // VerifySmartContractWalletSignatures needs isValidSignature() on-chain.
+        try {
+          const code = await window.ethereum?.request({
+            method: "eth_getCode",
+            params: [activeAddress, "latest"],
+          });
+          if (!code || code === "0x" || code === "0x0") {
+            console.warn(
+              `Safe at ${activeAddress} has no bytecode on Gnosis Chain. ` +
+                `VerifySmartContractWalletSignatures will fail until the contract is deployed.`,
+            );
+          } else {
+            console.log(
+              `Safe contract confirmed deployed at ${activeAddress} (bytecode length: ${code.length})`,
+            );
+          }
+        } catch (e) {
+          console.warn("Could not check Safe contract deployment status:", e);
+        }
+
         signer = createSCWSigner(
           activeAddress,
           async (message) => {
@@ -174,13 +204,15 @@ function App() {
       }
 
       const client = await Client.create(signer, {
-        env: "dev",
+        env: xmtpEnv,
         dbEncryptionKey: undefined,
         appVersion: "xmtp-miniapp/0",
         loggingLevel: LogLevel.Debug,
       });
 
       console.log("Client created:", client);
+
+      await client.sendSyncRequest();
 
       // Store inbox ID in localStorage if it's a new inbox
       if (!storedInboxId) {
@@ -213,6 +245,20 @@ function App() {
           "3. Turn OFF 'Block fingerprinting'\n" +
           "4. Refresh the page and try again\n\n" +
           "Or try Chrome/Firefox which have better compatibility.";
+      } else if (
+        errorMessage.includes("signature") ||
+        errorMessage.includes("VerifySmartContractWallet") ||
+        errorMessage.includes("invalid signature") ||
+        errorMessage.includes("status 0") ||
+        errorMessage.includes("grpc")
+      ) {
+        errorMessage +=
+          "\n\nSmart contract wallet signature verification failed.\n" +
+          "Possible causes:\n" +
+          "• The Safe wallet is not yet deployed on Gnosis Chain (chain 100).\n" +
+          "• The signature format returned by the Safe host is not ERC-1271 compatible.\n" +
+          "• A CORS or network error blocked the XMTP verification request.\n\n" +
+          "Check the browser console for 'Cross-Origin Request Blocked' or SCW signMessage warnings.";
       }
 
       setInboxError(errorMessage);
@@ -364,7 +410,13 @@ function App() {
                   {isCreatingInbox ? "Connecting..." : "Activate Inbox"}
                 </button>
                 {inboxError && (
-                  <p className="connect-hint" style={{ color: "var(--error-ink)", marginTop: "1rem", fontSize: "0.85rem" }}>
+                  <p
+                    className="connect-hint"
+                    style={{
+                      color: "var(--error-ink)",
+                      marginTop: "1rem",
+                      fontSize: "0.85rem",
+                    }}>
                     {inboxError}
                   </p>
                 )}
@@ -388,6 +440,7 @@ function App() {
                 syncAllConversations={syncAll}
                 onBack={() => setSelectedConversation(null)}
                 className={!selectedConversation ? "hidden-mobile" : ""}
+                connectedAddress={effectiveAddress}
               />
             </div>
           )
@@ -408,6 +461,8 @@ function App() {
             onCreateInbox={handleCreateInbox}
             circlesMode={circlesMode}
             onCirclesModeToggle={handleCirclesModeToggle}
+            xmtpEnv={xmtpEnv}
+            onXmtpEnvChange={handleXmtpEnvChange}
             address={effectiveAddress}
             isConnected={effectiveConnected}
             isMiniapp={isMiniapp}
