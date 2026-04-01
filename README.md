@@ -2,6 +2,16 @@
 
 A fully-functional XMTP chat application with integrated wallet connection, real-time messaging, and Circles integration capabilities.
 
+## Guide
+
+1. Onboarding
+
+   <video src="./static/video/onboard.mp4" width="300" controls></video>
+
+2. Send CRC in your chat
+
+   <video src="./static/video/sendtx.mp4" width="300" controls></video>
+
 ## Setup
 
 ### Prerequisites
@@ -60,7 +70,7 @@ The production build will be in the `dist/` directory.
    - Approve the connection in your wallet
 
 2. **Create XMTP Inbox**
-   - After wallet connection, click **Connect to XMTP**
+   - After wallet connection, click **Activate XMTP Inbox**
    - Sign the message in your wallet to create your XMTP identity
    - Your inbox ID will be saved automatically
 
@@ -88,9 +98,9 @@ The app stores the following data locally in your browser:
 
 - **XMTP Inbox ID**: Mapped to your wallet address (`xmtp-inbox-{address}`)
 
-### IndexedDB
+### OPFS (Origin Private File System)
 
-XMTP Browser SDK uses IndexedDB to store:
+XMTP Browser SDK uses OPFS to store:
 
 - Conversation data
 - Message history
@@ -117,7 +127,7 @@ XMTP Browser SDK uses IndexedDB to store:
 - **`src/components/AccountPage.jsx`** - Wallet connection and XMTP inbox management with Settings tab
 - **`src/components/ConversationList.jsx`** - Conversation list with refresh and new conversation buttons
 - **`src/components/MessageArea.jsx`** - Message display, filtering, and sending
-- **`src/components/BottomTabs.jsx`** - Bottom navigation for Chat and Account tabs
+- **`src/components/BottomTabs.jsx`** - Bottom navigation for Chat, Arcade, and Account tabs
 - **`src/components/NewConversationModal.jsx`** - Modal for creating new conversations
 
 ### State Management
@@ -132,7 +142,7 @@ XMTP Browser SDK uses IndexedDB to store:
 
 ### Helpers
 
-- **`src/helpers/createSigner.js`** - EOA signer creation for XMTP
+- **`src/helpers/createSigner.js`** - EOA and SCW signer creation for XMTP
 
 ### Styling
 
@@ -148,8 +158,8 @@ XMTP Browser SDK uses IndexedDB to store:
 
 ### XMTP Integration
 
-- **Environment**: Dev network
-- **Storage**: IndexedDB for XMTP data
+- **Environment**: Configurable (dev/production) via Account > Settings
+- **Storage**: OPFS for XMTP data
 - **Streaming**: Real-time conversation and message updates
 - **Members**: Extracts Ethereum addresses from member accountIdentifiers
 
@@ -199,26 +209,6 @@ Response
         "group": "0x013d8f8227dce534876bba8b3441cd93a7a241f9",
         "member": "0xf7bd3d83df90b4682725adf668791d4d1499207f",
         "expiryTime": 9223372036854776000
-      },
-      {
-        "blockNumber": 0,
-        "timestamp": 1772685519,
-        "transactionIndex": 0,
-        "logIndex": 0,
-        "transactionHash": "",
-        "group": "0x2ce85e0d3b5b875441ba84d4865ac99578688202",
-        "member": "0xf7bd3d83df90b4682725adf668791d4d1499207f",
-        "expiryTime": 9999999999
-      },
-      {
-        "blockNumber": 0,
-        "timestamp": 1772685519,
-        "transactionIndex": 0,
-        "logIndex": 0,
-        "transactionHash": "",
-        "group": "0x2bf0e687c67b1d93ad485647819fcb6f718e7abe",
-        "member": "0xf7bd3d83df90b4682725adf668791d4d1499207f",
-        "expiryTime": 9007199254740991
       }
     ],
     "hasMore": false
@@ -301,8 +291,8 @@ Inside any 1-on-1 conversation, tap the **+** button in the composer bar to open
 1. **XMTP send** — `conversation.sendText("crc_transfer# {...}", true)` publishes an optimistic message to the local store and returns a `messageId` before the transaction is broadcast.
 2. **messageId encoding** — The `messageId` is encoded as a Circles SDK type `0x0002` payload (`0x0100020020` + 32-byte hex) and passed as the `_data` argument of `safeBatchTransferFrom`. This links the on-chain transaction to the XMTP message.
 3. **On-chain transfer** — `safeBatchTransferFrom` is called on the Circles V2 Hub (`0xc12C1E50ABB450d6205Ea2C3Fa861b3B834d13e8`, Gnosis chain). The transfer path is resolved first via `circlesV2_findPath`.
-4. **XMTP publish** — `conversation.publishMessages()` is called after `writeContract` resolves to broadcast the optimistic message to the network. Both XMTP calls are wrapped in `try-catch` so a node failure cannot block the on-chain transaction.
-5. **Deferred render** — The sender's transfer message modal returns `null` until `writeContract` resolves with a transaction hash. The `onTxComplete(messageId, hash)` callback from `CRCTransferFlow` populates a `crcTxHashes` map in `MessageArea`; the message modal renders only when its entry is present. This prevents a flash of a hash-less message modal from the optimistic message.
+4. **XMTP publish** — `conversation.publishMessages()` is called **before** the wallet signing step to avoid intent TTL expiry (the signing step can take 30+ seconds). Both XMTP calls are wrapped in `try-catch` so a node failure cannot block the on-chain transaction.
+5. **Tx hash recovery** — After the transaction completes, the sender's bubble polls `circles_getTransferData` (same as the receiver) to discover the real on-chain transaction hash. This works reliably for both EOA and SCW (Safe) wallets, since SCW wallets don't return the actual on-chain hash from `sendTransaction`.
 
 #### Receiver side
 
@@ -326,12 +316,12 @@ Inside any 1-on-1 conversation, tap the **+** button in the composer bar to open
 
 - Disable browser privacy shields/ad blockers for this site
 - Try a different browser (Chrome/Firefox recommended)
-- Check that IndexedDB is enabled in browser settings
+- Check that OPFS is enabled in browser settings
 - Clear browser cache and try again
 
 **"Failed to load XMTP client"**
 
-- Your browser may be blocking IndexedDB access
+- Your browser may be blocking OPFS access
 - Try disabling browser extensions temporarily
 - Ensure you're not in private/incognito mode
 
@@ -371,13 +361,13 @@ Inside any 1-on-1 conversation, tap the **+** button in the composer bar to open
   - [ ] Only allow dm from avatar you trust
   - [x] Circles as identifier ID
   - [x] Search receiver with Circles address
-  - [x] Support search using Circles usernameCircles Status
+  - [x] Support search using Circles username
 - [ ] XMTP Group chat support
 - [ ] Circles group chat support
   - [x] Show available Circles group
   - [ ] Create Circles group and add member (WIP)
   - [ ] Join existing Circles group
-- [ ] Compatible with Circles MiniApp
+- [x] Compatible with Circles MiniApp
 
 ## Resources
 
