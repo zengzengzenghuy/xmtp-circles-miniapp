@@ -151,6 +151,16 @@ function CRCTransferFlow({
           ]);
           return hashes[0];
         },
+        sendTransaction: async (tx) => {
+          const hashes = await miniappSendTransactions([
+            {
+              to: tx.to,
+              value: tx.value ? String(tx.value) : "0",
+              data: tx.data || "0x",
+            },
+          ]);
+          return hashes[0];
+        },
       }
     : wagmiWalletClient;
 
