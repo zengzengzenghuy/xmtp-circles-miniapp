@@ -120,18 +120,23 @@ export async function callHubTransfer({
     txData ? { txData } : undefined,
   );
 
-  // Step 5: Send each tx sequentially (nonce ordering), then pick the hash
-  // belonging to operateFlowMatrix — identified by its 4-byte selector 0x0d22d9b5.
-  // It is always present; approval / unwrap / wrap txs around it are optional.
-  const OPERATE_FLOW_MATRIX_SELECTOR = "0x0d22d9b5";
-  const hashes = [];
-  for (const tx of txs) {
-    hashes.push(await walletClient.sendTransaction(tx));
+  // Step 5: Execute transactions.
+  // SCW (Safe) mode: batch all txs into one on-chain transaction via sendBatchTransactions.
+  // EOA mode: send each tx sequentially, then pick the operateFlowMatrix hash.
+  let hash;
+  if (walletClient.sendBatchTransactions) {
+    hash = await walletClient.sendBatchTransactions(txs);
+  } else {
+    const OPERATE_FLOW_MATRIX_SELECTOR = "0x0d22d9b5";
+    const hashes = [];
+    for (const tx of txs) {
+      hashes.push(await walletClient.sendTransaction(tx));
+    }
+    const flowMatrixIndex = txs.findIndex((tx) =>
+      tx.data?.startsWith(OPERATE_FLOW_MATRIX_SELECTOR),
+    );
+    hash = hashes[flowMatrixIndex] ?? hashes[hashes.length - 1];
   }
-  const flowMatrixIndex = txs.findIndex((tx) =>
-    tx.data?.startsWith(OPERATE_FLOW_MATRIX_SELECTOR),
-  );
-  const hash = hashes[flowMatrixIndex] ?? hashes[hashes.length - 1];
 
   return { hash, messageId };
 }

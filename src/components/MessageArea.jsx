@@ -92,8 +92,10 @@ function CRCTransferBubble({
     };
   }, [message.id, connectedAddress, overrideTxHash]);
 
-  // Sender: don't render until txHash is available from the completed writeContract
-  if (isSent && !resolvedTxHash) return null;
+  // Sender (EOA): overrideTxHash is a real hash string, render immediately.
+  // Sender (SCW/miniapp): overrideTxHash is null, poll RPC for the real hash.
+  // Hide only when sender has no hash yet and isn't polling (crcTxHashes entry missing entirely).
+  if (isSent && !resolvedTxHash && overrideTxHash === undefined) return null;
 
   const label = isSent ? `Sent ${txValue} CRC` : `Sent ${txValue} CRC`;
 
@@ -159,6 +161,16 @@ function CRCTransferFlow({
               data: tx.data || "0x",
             },
           ]);
+          return hashes[0];
+        },
+        sendBatchTransactions: async (txs) => {
+          const hashes = await miniappSendTransactions(
+            txs.map((tx) => ({
+              to: tx.to,
+              value: tx.value ? String(tx.value) : "0",
+              data: tx.data || "0x",
+            })),
+          );
           return hashes[0];
         },
       }
@@ -343,7 +355,7 @@ function CRCTransferFlow({
                         peerDisplay: to,
                         conversation,
                       });
-                      onTxComplete?.(messageId, hash);
+                      onTxComplete?.(messageId, null);
                       setTxState("done");
                     } catch (err) {
                       setTxError(err.message || "Transaction failed");
