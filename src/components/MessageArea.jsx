@@ -356,6 +356,7 @@ function CRCTransferFlow({
 function MessageArea({
   conversation,
   xmtpClient,
+  syncAllConversations,
   onBack,
   className,
   connectedAddress,
@@ -424,7 +425,10 @@ function MessageArea({
 
     const loadMessages = async () => {
       try {
-        // Sync messages for this conversation from network
+        // Sync all conversations first, then sync this conversation from network
+        if (syncAllConversations) {
+          await syncAllConversations();
+        }
         await sync(true);
         console.log("Loaded messages for conversation:", conversation.id);
       } catch (error) {
@@ -433,7 +437,7 @@ function MessageArea({
     };
 
     loadMessages();
-  }, [conversation, sync]);
+  }, [conversation, sync, syncAllConversations]);
 
   useEffect(() => {
     setShowCRCTransfer(false);

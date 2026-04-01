@@ -56,6 +56,9 @@ export const useConversation = (conversationId) => {
 
       setSending(true);
       try {
+        await conversation.sync();
+        const active = await conversation.isActive();
+        if (!active) throw new Error("Group is inactive");
         await conversation.sendText(text);
       } finally {
         setSending(false);

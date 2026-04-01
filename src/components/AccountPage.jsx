@@ -277,6 +277,24 @@ function AccountPage({
                       </div>
                     )}
                   </div>
+
+                  <div className="account-panel">
+                    <div className="account-panel-header">
+                      <div>
+                        <span className="account-panel-kicker">Connection</span>
+                        <h2>Disconnect wallet</h2>
+                        <p>
+                          Disconnect your wallet from this app. You can reconnect
+                          at any time.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      className="disconnect-button"
+                      onClick={() => disconnect()}>
+                      Disconnect Wallet
+                    </button>
+                  </div>
                 </>
               )}
             </div>
