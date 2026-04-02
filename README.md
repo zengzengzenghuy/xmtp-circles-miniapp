@@ -74,17 +74,16 @@ The production build will be in the `dist/` directory.
 2. **Create XMTP Inbox**
    - After wallet connection, click **Activate XMTP Inbox**
    - Sign the message in your wallet to create your XMTP identity
-   - Your inbox ID will be saved automatically
+   - Your inbox ID will be registered on xmtp network
 
 3. **Start a Conversation**
-   - Go to the **Chat** tab
+   - Go to the **Message** tab
    - Click the **+** button
-   - Enter a recipient's Ethereum address (must be XMTP-enabled)
+   - Enter a recipient's Ethereum address (must be registered on XMTP network & Circles avatar)
    - Send your first message
 
 4. **Configure Settings**
    - Go to **Account** tab → **Settings** tab
-   - Toggle **Circles mode** to enable Circles integration features (WIP)
 
 ### Browser Compatibility
 
@@ -173,104 +172,6 @@ XMTP Browser SDK uses OPFS to store:
 - Proper sent/received styling
 - Transfer CRC with note
 
-### Group chat(On Roadmap)
-
-1. Circles Avatar group chat
-   Circles avatars can create their own group chat without creating a Circles group. It works like usual xmtp group chat, with Circles avatars as group member.
-
-2. Circles group group chat
-   1. Create new Circles group and xmtp group -> Backend: store the relationship
-   2. Exisiting Circles group owner can create xmtp group chat
-   3. Exisitng Circles group members can request to join xmtp group chat
-   4. New user can request to join Circles group through group request
-
-Tips:
-Check the Circles group membership status of the connected Circles Avatar.
-
-Request
-
-```
-curl -X POST 'https://staging.circlesubi.network/' \
-  -H 'Content-Type: application/json' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"circles_getGroupMemberships","params":["0xF7bD3d83df90B4682725ADf668791D4D1499207f"]}'
-```
-
-Response
-
-```
-{
-  "jsonrpc": "2.0",
-  "result": {
-    "results": [
-      {
-        "blockNumber": 0,
-        "timestamp": 1772685519,
-        "transactionIndex": 0,
-        "logIndex": 0,
-        "transactionHash": "",
-        "group": "0x013d8f8227dce534876bba8b3441cd93a7a241f9",
-        "member": "0xf7bd3d83df90b4682725adf668791d4d1499207f",
-        "expiryTime": 9223372036854776000
-      }
-    ],
-    "hasMore": false
-  },
-  "id": 1
-}
-```
-
-check available group info
-Request
-
-```
-{
-  "jsonrpc": "2.0",
-  "id": 1,
-  "method": "circles_getProfileView",
-  "params": [
-   // Group address
-    "0x1aca75e38263c79d9d4f10df0635cc6fcfe6f026"
-  ]
-}
-```
-
-Response
-
-```
-{
-  "jsonrpc": "2.0",
-  "result": {
-    "address": "0x1aca75e38263c79d9d4f10df0635cc6fcfe6f026",
-    "avatarInfo": {
-      "version": 2,
-      "type": "Group",
-      "avatar": "0x1aca75e38263c79d9d4f10df0635cc6fcfe6f026",
-      "tokenId": "0x1aca75e38263c79d9d4f10df0635cc6fcfe6f026",
-      "hasV1": false,
-      "cidV0Digest": "",
-      "cidV0": "QmPbkxGG1QNHC4Vk1xYexPGTaYYWuhoFirS3QoHhTH8F7W",
-      "isHuman": false,
-      "name": "Circles Backers",
-      "symbol": "CBG"
-    },
-    "profile": {
-      "address": "0x1aca75e38263c79d9d4f10df0635cc6fcfe6f026",
-      "name": "Circles Backers",
-      "description": "Circles Backers group",
-      "previewImageUrl": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnR",
-      "shortName": "Znoz4ZQVg8bs",
-      "avatarType": "Group"
-    },
-    "trustStats": {
-      "trustsCount": 0,
-      "trustedByCount": 0
-    },
-    "v2Balance": "0"
-  },
-  "id": 1
-}
-```
-
 ## CRC Transfer with Note
 
 ### Why It Matters
@@ -290,11 +191,41 @@ Inside any 1-on-1 conversation, tap the **+** button in the composer bar to open
 
 #### Sender side
 
+> > In this implementation, we append `crc_transfer#` in front of normal message content as a indicator for App/UI to process the transfer message correctly on the UI instead of rendering the raw message.
+
 1. **XMTP send** — `conversation.sendText("crc_transfer# {...}", true)` publishes an optimistic message to the local store and returns a `messageId` before the transaction is broadcast.
-2. **messageId encoding** — The `messageId` is encoded as a Circles SDK type `0x0002` payload (`0x0100020020` + 32-byte hex) and passed as the `_data` argument of `safeBatchTransferFrom`. This links the on-chain transaction to the XMTP message.
-3. **On-chain transfer** — `safeBatchTransferFrom` is called on the Circles V2 Hub (`0xc12C1E50ABB450d6205Ea2C3Fa861b3B834d13e8`, Gnosis chain). The transfer path is resolved first via `circlesV2_findPath`.
+2. **messageId encoding** — The `messageId` is encoded as a Circles SDK type `0x0002` payload (`0x0100020020` + 32-byte hex) and passed as `txData` to `TransferBuilder.constructAdvancedTransfer()`. This links the on-chain transaction to the XMTP message.
+3. **On-chain transfer** — The Circles SDK `TransferBuilder` constructs the transfer transactions (including path resolution), which culminate in an `operateFlowMatrix` call on the Circles V2 Hub (`0xc12C1E50ABB450d6205Ea2C3Fa861b3B834d13e8`, Gnosis chain). For SCW (Safe) wallets the transactions are batched via `sendBatchTransactions`; for EOA wallets they are sent sequentially and the `operateFlowMatrix` tx hash (selector `0x0d22d9b5`) is picked as the canonical hash to be rendered on the Converstation UI.
 4. **XMTP publish** — `conversation.publishMessages()` is called **before** the wallet signing step to avoid intent TTL expiry (the signing step can take 30+ seconds). Both XMTP calls are wrapped in `try-catch` so a node failure cannot block the on-chain transaction.
-5. **Tx hash recovery** — After the transaction completes, the sender's bubble polls `circles_getTransferData` (same as the receiver) to discover the real on-chain transaction hash. This works reliably for both EOA and SCW (Safe) wallets, since SCW wallets don't return the actual on-chain hash from `sendTransaction`.
+5. **Tx hash recovery** — After the transaction completes, the sender's bubble polls `circles_getTransferData` (same as the receiver) to discover the real on-chain transaction hash.
+
+```mermaid
+sequenceDiagram
+    actor Sender
+    participant App/UI
+    participant XMTP
+    participant GnosisChain
+
+    Sender->>App/UI: Fill amount + note, click Sign & Send
+    App/UI->>XMTP: sendText("crc_transfer# {...}", optimistic=true)
+    XMTP-->>App/UI: messageId
+    App/UI->>App/UI: Encode messageId as type 0x0002 txData
+    App/UI->>XMTP: publishMessages()
+    XMTP-->>App/UI: Message broadcast confirmed
+    App/UI->>App/UI: TransferBuilder.constructAdvancedTransfer(txData)
+    App/UI->>Sender: Prompt wallet signature
+    Sender->>App/UI: Sign transaction(s)
+    App/UI->>GnosisChain: operateFlowMatrix (with encoded messageId)
+    GnosisChain-->>App/UI: txHash
+    App/UI->>App/UI: Render CRCTransferBubble with txHash
+
+    loop Poll every 5s (up to 24 attempts)
+        App/UI->>GnosisChain: circles_getTransferData(sender)
+        GnosisChain-->>App/UI: Transfer list
+        App/UI->>App/UI: Match transfer.data == encoded messageId
+    end
+    App/UI-->>Sender: Show transfer bubble with View transaction link
+```
 
 #### Receiver side
 
@@ -302,13 +233,34 @@ Inside any 1-on-1 conversation, tap the **+** button in the composer bar to open
 2. **Polling for the tx hash** — The bubble message modal encodes `message.id` as type `0x0002` and polls `circles_getTransferData` every 5 seconds (up to 24 attempts, ~2 minutes) looking for a transfer whose `data` field matches the encoded messageId.
 3. **Link display** — Once matched, the bubble shows the transfer amount, note, and a **View transaction ↗** link to `https://gnosisscan.io/tx/{txHash}`.
 
+```mermaid
+sequenceDiagram
+    participant App/UI
+    participant XMTP
+    participant GnosisChain
+    actor Receiver
+
+    XMTP-->>App/UI: New message (crc_transfer# {...})
+    App/UI->>App/UI: Detect crc_transfer# prefix
+    App/UI->>App/UI: Render CRCTransferBubble (pending)
+    App/UI->>App/UI: Encode message.id as type 0x0002
+
+    loop Poll every 5s (up to 24 attempts)
+        App/UI->>GnosisChain: circles_getTransferData(receiver)
+        GnosisChain-->>App/UI: Transfer list
+        App/UI->>App/UI: Match transfer.data == encoded messageId
+    end
+
+    App/UI-->>Receiver: Show amount, note, and View transaction link
+```
+
 #### Component breakdown
 
-| Layer        | Responsibility                                                                                                                                                                           |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **XMTP**     | Message delivery; `messageId` used as the on-chain annotation key; `publishMessages()` broadcasts after tx                                                                               |
-| **Circles**  | `circlesV2_findPath` for pathfinding and send-limit discovery; `safeBatchTransferFrom` on the V2 Hub for the actual transfer; `circles_getTransferData` for receiver-side tx hash lookup |
-| **Frontend** | `CRCTransferFlow` modal (3-step: picker → form → confirm); `CRCTransferBubble` for rendering; deferred sender render via `crcTxHashes` map; receiver polling loop in bubble `useEffect`  |
+| Layer        | Responsibility                                                                                                                                                                                                 |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **XMTP**     | Message delivery; `messageId` used as the on-chain annotation key; `publishMessages()` broadcasts before tx is executed on chain to prevent TTL issue                                                          |
+| **Circles**  | `TransferBuilder.constructAdvancedTransfer()` for pathfinding and building transfer txs; `operateFlowMatrix` on the V2 Hub for the actual transfer; `circles_getTransferData` for receiver-side tx hash lookup |
+| **Frontend** | `CRCTransferFlow` modal (3-step: picker → form → confirm); `CRCTransferBubble` for rendering; deferred sender render via `crcTxHashes` map; receiver polling loop in bubble `useEffect`                        |
 
 ## Troubleshooting
 
@@ -340,10 +292,11 @@ Inside any 1-on-1 conversation, tap the **+** button in the composer bar to open
 - Click the refresh button (↻) in the conversation list
 - Check browser console for errors
 - Verify you're connected to the same network (dev)
+- [Backup or archive](https://docs.xmtp.org/chat-apps/list-stream-sync/archive-backups) should be implemented on production ready app to avoid losing message history
 
 **Cannot send messages**
 
-- Ensure your wallet is still connected
+- Ensure your wallet is still connected and on Gnosis Chain.
 - Check that you have an active XMTP inbox
 - Verify the conversation is active
 
@@ -357,19 +310,19 @@ Inside any 1-on-1 conversation, tap the **+** button in the composer bar to open
 ## Roadmap
 
 - [x] Support xmtp history sync
-- [X] Circles integration features
+- [x] Circles integration features
   - [x] Transfer CRC with Notes
   - [x] Only allow conversation with human and has registered on XMTP
   - [ ] Only allow dm from avatar you trust
   - [x] Circles as identifier ID
   - [x] Search receiver with Circles address
   - [x] Support search using Circles username
+- [x] Compatible with Circles MiniApp
 - [ ] XMTP Group chat support
 - [ ] Circles group chat support
   - [ ] Show available Circles group
   - [ ] Create Circles group and add member (WIP)
   - [ ] Join existing Circles group
-- [x] Compatible with Circles MiniApp
 
 ## Resources
 
